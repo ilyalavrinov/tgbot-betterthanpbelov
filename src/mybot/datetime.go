@@ -8,7 +8,11 @@ func askPBelovForDate(bot *tgbotapi.BotAPI) {
     // every day at 6:00 send a request to pbelov bot
 
     now := time.Now()
-    t1 := now + time.ParseDuration("24h")
+    dur, err := time.ParseDuration("24h")
+    if err != nil {
+        log.Panic(err)
+    }
+    t1 := now.Add(dur)
     next_date_req := time.Date(t1.Year(), t1.Month(), t1.Day(), 06, 00, 00, 00, time.Local)
     diff := next_date_req.Sub(now)
 

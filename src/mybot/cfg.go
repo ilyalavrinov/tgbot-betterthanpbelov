@@ -4,7 +4,9 @@ import "gopkg.in/gcfg.v1"
 import "log"
 
 type Config struct {
-    Token string
+    TGBot struct {
+        Token string
+    }
 }
 
 func NewConfig(filename string) (Config, error) {

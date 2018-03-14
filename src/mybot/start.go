@@ -25,7 +25,7 @@ func setupBot(botToken string) (*tgbotapi.BotAPI, *tgbotapi.UpdatesChannel) {
     return bot, &updates
 }
 
-func executeUpdates(updates tgbot.UpdatesChannel) {
+func executeUpdates(updates *tgbotapi.UpdatesChannel) {
     for update := range *updates {
         if update.Message == nil {
             log.Print("Message: empty. Skipping");
@@ -33,6 +33,10 @@ func executeUpdates(updates tgbot.UpdatesChannel) {
         }
 
         log.Printf("Message from: %s; Text: %s", update.Message.From.UserName, update.Message.Text)
+        log.Printf("Update: %+v", update)
+        log.Printf("Message: %+v", update.Message)
+        log.Printf("Message.Chat: %+v", update.Message.Chat)
+        log.Printf("Message.NewChatMembers: %+v", update.Message.NewChatMembers)
         // this bot does nothing now. Maybe it will be updated later
     }
 }
@@ -46,7 +50,7 @@ func Start(cfg_filename string) error {
         return err
     }
 
-    bot, updates := setupBot(tokens.TGBot.Token);
+    bot, updates := setupBot(cfg.TGBot.Token);
     go askPBelovForDate(bot)
     executeUpdates(updates)
 
