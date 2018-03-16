@@ -5,7 +5,7 @@ import "regexp"
 import "strings"
 import "gopkg.in/telegram-bot-api.v4"
 
-var kittiesWords = []string{"кот", "котэ", "котик*", "котятк*"}
+var kittiesWords = []string{"^кот$", "^котэ$", "^котик*", "^котятк*"}
 
 // panics internally if something goes wrong
 func setupBot(botToken string) (*tgbotapi.BotAPI, *tgbotapi.UpdatesChannel) {
