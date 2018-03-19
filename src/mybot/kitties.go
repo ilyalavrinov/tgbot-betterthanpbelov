@@ -2,7 +2,10 @@ package mybot
 
 import "log"
 import "os"
+import "path"
+import "math/rand"
 import "io"
+import "io/ioutil"
 import "strings"
 import "net/http"
 import "gopkg.in/telegram-bot-api.v4"
@@ -17,16 +20,50 @@ type PicCache struct {
     loadLowLimit uint
 }
 
+const cache_dir = "tgbot-cache"
+const cache_pic_subdir = "pics"
+
 func NewPicCache(cacheName string) *PicCache {
+    home_dir := os.Getenv("HOME")
+    if home_dir == "" {
+        log.Fatal("Home directory cannot be retrieved from environment")
+    }
     cache := &PicCache{
                 name: cacheName,
-                location: "/home/ilyalavrinov/" + cacheName + "/",
+                location:  path.Join(home_dir, cache_dir, cache_pic_subdir, cacheName),
                 filenames: make([]string, 0, 100),
                 curPos: 0,
                 loadBatchSize: 20,
                 loadLowLimit: 5}
 
-    // TODO: load exiting from disk
+    err := os.MkdirAll(cache.location, os.ModePerm)
+    if err != nil {
+        log.Fatalf("Could not create cache storage directory at '%s' due to error: %s", cache.location, err)
+    }
+    log.Printf("New cache has been requested for '%s'; final location: %s", cache.name, cache.location)
+
+    fs_files, err := ioutil.ReadDir(cache.location)
+    if err != nil {
+        log.Fatalf("Can't read %s to get a list of files. Error: %s", cache.location, err)
+    }
+    log.Printf("Found %d files at %s; loading them to cache %s", len(fs_files), cache.location, cache.name)
+
+    // shuffling (rand.Shuffle is available only in go 1.10)
+    for i := range fs_files {
+        j := rand.Intn(i + 1)
+        fs_files[i], fs_files[j] = fs_files[j], fs_files[i]
+    }
+
+    allowed_ext := map[string]bool{".jpg": true, ".jpeg": true, ".png": true}
+    for _, f := range(fs_files) {
+        if allowed_ext[path.Ext(f.Name())] != true {
+            log.Printf("File '%s' doesn't have expected extenstion for cache %s. Removing it", f.Name(), cache.name)
+            _ = os.Remove(path.Join(cache.location, f.Name()))
+            continue
+        }
+
+        cache.filenames = append(cache.filenames, f.Name())
+    }
 
     return cache
 }
@@ -39,8 +76,12 @@ func (cache *PicCache) GetNext() string {
         cache.filenames = append(cache.filenames, loadMoreKitties(cache.location, cache.loadBatchSize)...)
     }
 
-    filename := cache.location + cache.filenames[cache.curPos]
+    filename := path.Join(cache.location, cache.filenames[cache.curPos])
     cache.curPos += 1
+    log.Printf("Pic cache '%s' returns file '%s' as a result (total cached: %d, current position: %d)", cache.name,
+                                                                                                        filename,
+                                                                                                        len(cache.filenames),
+                                                                                                        cache.curPos)
 
     return filename
 }
@@ -66,7 +107,7 @@ func loadMoreKitties(location string, loadBatchSize uint) []string {
         log.Printf("Cat %d received from %s", i, actualUrl)
         actualUrlParts := strings.Split(actualUrl, "/")
         filename := actualUrlParts[len(actualUrlParts) - 1] // getting last piece as actual filename
-        file, err := os.Create(location + filename)
+        file, err := os.Create(path.Join(location, filename))
         if err != nil {
             log.Printf("Could not create new file for a cat %s due to error: %s. Skipping this one", filename, err)
             continue
@@ -79,7 +120,7 @@ func loadMoreKitties(location string, loadBatchSize uint) []string {
             continue
         }
         file.Close()
-        log.Printf("Saved cat %s to the filesystem", filename)
+        log.Printf("Saved cat '%s' to the filesystem at '%s'", filename, location)
         filenames = append(filenames, filename)
     }
 

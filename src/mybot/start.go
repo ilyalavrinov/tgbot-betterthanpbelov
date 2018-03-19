@@ -79,7 +79,7 @@ func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI) {
             }
             _, err = bot.Send(newMsg)
             if err != nil {
-                log.Print("Cannot reply with a kitty pic due to error: %s", err)
+                log.Printf("Cannot reply with a kitty pic due to error: %s", err)
                 continue
             }
             log.Print("Message with kitties has been sent!")
