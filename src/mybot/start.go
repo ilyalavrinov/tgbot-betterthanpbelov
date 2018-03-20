@@ -52,7 +52,7 @@ func msgMatches(text string, patterns []string) bool {
     msgWords := strings.Split(text, " ")
     for _, word := range msgWords {
         for _, re := range compiledRegExp {
-            if re.MatchString(word) {
+            if re.MatchString(strings.ToLower(word)) {
                 log.Printf("Word %s matched regexp %s", word, re)
                 return true
             }
