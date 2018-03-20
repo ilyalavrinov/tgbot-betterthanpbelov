@@ -7,6 +7,9 @@ type Config struct {
     TGBot struct {
         Token string
     }
+    Weather struct {
+        Token string
+    }
 }
 
 func NewConfig(filename string) (Config, error) {

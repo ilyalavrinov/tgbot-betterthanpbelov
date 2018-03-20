@@ -6,6 +6,7 @@ import "strings"
 import "gopkg.in/telegram-bot-api.v4"
 
 var kittiesWords = []string{"^кот$", "^котэ$", "^котик*", "^котятк*"}
+var weatherWords = []string{"^погода$", "^холодно*", "^жарко*"}
 
 // panics internally if something goes wrong
 func setupBot(botToken string) (*tgbotapi.BotAPI, *tgbotapi.UpdatesChannel) {
@@ -61,7 +62,7 @@ func msgMatches(text string, patterns []string) bool {
     return false
 }
 
-func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI) {
+func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI, cfg Config) {
     for update := range *updates {
         if update.Message == nil {
             log.Print("Message: empty. Skipping");
@@ -74,7 +75,7 @@ func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI) {
             log.Printf("Message from %s with text %s contains one of kitties words", update.Message.From.UserName, update.Message.Text)
             newMsg, err := sendKitties(update)
             if err != nil {
-                log.Printf("Cannot create a massage with kitties due to error: %s", err)
+                log.Printf("Cannot create a message with kitties due to error: %s", err)
                 continue
             }
             _, err = bot.Send(newMsg)
@@ -83,6 +84,21 @@ func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI) {
                 continue
             }
             log.Print("Message with kitties has been sent!")
+        }
+        // TODO: duplication. Think how to use some OOP here
+        if msgMatches(update.Message.Text,weatherWords) {
+            log.Printf("Message from %s with text %s contains one of weather words", update.Message.From.UserName, update.Message.Text)
+            newMsg, err := sendWeather(update, cfg)
+            if err != nil {
+                log.Printf("Cannot create a message with weather due to error: %s", err)
+                continue
+            }
+            _, err = bot.Send(newMsg)
+            if err != nil {
+                log.Printf("Cannot reply with a weather due to error: %s", err)
+                continue
+            }
+            log.Print("Message with weather has been sent!")
         }
     }
 }
@@ -97,8 +113,8 @@ func Start(cfg_filename string) error {
     }
 
     bot, updates := setupBot(cfg.TGBot.Token);
-    go askPBelovForDate(bot)
-    executeUpdates(updates, bot)
+    //go askPBelovForDate(bot)
+    executeUpdates(updates, bot, cfg)
 
     log.Print("Stopping my bot")
     return nil
