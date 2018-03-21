@@ -112,6 +112,8 @@ func Start(cfg_filename string) error {
         return err
     }
 
+    log.Printf("Starting bot with config: %+v", cfg)
+
     bot, updates := setupBot(cfg.TGBot.Token);
     //go askPBelovForDate(bot)
     executeUpdates(updates, bot, cfg)

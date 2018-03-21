@@ -15,10 +15,18 @@ type weatherData struct {
     Main struct {
         Temp float64
     }
+    Name string
+    Weather []struct {
+        Description string
+    }
+    Wind struct {
+        Speed float32
+    }
 }
 
 func sendWeather(update tgbotapi.Update, cfg Config) (tgbotapi.MessageConfig, error) {
-    weather_url := fmt.Sprintf("http://api.openweathermap.org/data/2.5/weather?id=%d&APPID=%s", cityID["NN"], cfg.Weather.Token)
+    weather_url := fmt.Sprintf("http://api.openweathermap.org/data/2.5/weather?id=%d&APPID=%s&lang=ru&units=metric", cityID["NN"],
+                                                                                                                     cfg.Weather.Token)
     log.Printf("Sending weather request using url: %s", weather_url)
 
     resp, err := http.Get(weather_url)
@@ -38,7 +46,10 @@ func sendWeather(update tgbotapi.Update, cfg Config) (tgbotapi.MessageConfig, er
         return msg, err
     }
 
-    temp_in_C := weather_data.Main.Temp - 273.15
-    msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Погодка норм, %f градусов", temp_in_C))
+    weather_msg := fmt.Sprintf("Сейчас в %s: %s, %.1f градусов, дует ветер %.0f м/с", weather_data.Name,
+                                                                                      weather_data.Weather[0].Description,
+                                                                                      weather_data.Main.Temp,
+                                                                                      weather_data.Wind.Speed)
+    msg := tgbotapi.NewMessage(update.Message.Chat.ID, weather_msg)
     return msg, nil
 }
