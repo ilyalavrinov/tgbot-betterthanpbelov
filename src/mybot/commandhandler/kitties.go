@@ -1,4 +1,4 @@
-package mybot
+package cmd
 
 import "log"
 import "os"
@@ -23,12 +23,12 @@ type PicCache struct {
 const cache_dir = "tgbot-cache"
 const cache_pic_subdir = "pics"
 
-func NewPicCache(cacheName string) *PicCache {
+func NewPicCache(cacheName string) PicCache {
     home_dir := os.Getenv("HOME")
     if home_dir == "" {
         log.Fatal("Home directory cannot be retrieved from environment")
     }
-    cache := &PicCache{
+    cache := PicCache{
                 name: cacheName,
                 location:  path.Join(home_dir, cache_dir, cache_pic_subdir, cacheName),
                 filenames: make([]string, 0, 100),
@@ -128,15 +128,26 @@ func loadMoreKitties(location string, loadBatchSize uint) []string {
     return filenames
 }
 
-var kittiesCache *PicCache = nil
+var kittiesWords = []string{"^кот$", "^котэ$", "^котик*", "^котятк*"}
 
-func sendKitties(update tgbotapi.Update) (tgbotapi.PhotoConfig, error) {
-    log.Print("Sending kitties")
+type kittiesHandler struct {
+    cache PicCache
+}
 
-    if kittiesCache == nil {
-        kittiesCache = NewPicCache("kitties")
+func NewKittiesHandler() CommandHandler {
+    handler := kittiesHandler{}
+    handler.cache = NewPicCache("kitties")
+    return &handler
+}
+
+func (handler *kittiesHandler) HandleMsg(msg *tgbotapi.Update, ctx Context) (*Result, error) {
+    if !msgMatches(msg.Message.Text, kittiesWords) {
+        return nil, nil
     }
-    // TODO: send ID if this cat has been already sent
-    picMsg := tgbotapi.NewPhotoUpload(update.Message.Chat.ID, kittiesCache.GetNext())
-    return picMsg, nil
+
+    picMsg := tgbotapi.NewPhotoUpload(msg.Message.Chat.ID, handler.cache.GetNext())
+
+    result := NewResult()
+    result.Reply = &picMsg
+    return &result, nil
 }

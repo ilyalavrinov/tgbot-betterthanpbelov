@@ -10,6 +10,10 @@ type Config struct {
     Weather struct {
         Token string
     }
+
+    Owners struct {
+        ID []string
+    }
 }
 
 func NewConfig(filename string) (Config, error) {

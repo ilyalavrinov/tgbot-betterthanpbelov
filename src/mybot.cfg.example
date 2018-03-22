@@ -3,3 +3,6 @@ token = <PLACE YOUR TOKEN HERE>
 
 [weather]
 token = <TOKEN FROM OPEN WEATHER MAP>
+
+[owners]
+id = ilyalavrinov

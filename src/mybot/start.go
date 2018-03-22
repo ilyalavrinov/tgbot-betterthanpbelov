@@ -1,12 +1,9 @@
 package mybot
 
 import "log"
-import "regexp"
-import "strings"
 import "gopkg.in/telegram-bot-api.v4"
 
-var kittiesWords = []string{"^кот$", "^котэ$", "^котик*", "^котятк*"}
-var weatherWords = []string{"^погода$", "^холодно*", "^жарко*"}
+import "./commandhandler"
 
 // panics internally if something goes wrong
 func setupBot(botToken string) (*tgbotapi.BotAPI, *tgbotapi.UpdatesChannel) {
@@ -38,31 +35,14 @@ func dumpMessage(update tgbotapi.Update) {
     log.Printf("Message.NewChatMembers: %+v", update.Message.NewChatMembers)
 }
 
-func msgMatches(text string, patterns []string) bool {
-    compiledRegExp := make([]*regexp.Regexp, 0, len(patterns))
-    for _, pattern := range patterns {
-        re, err := regexp.Compile(pattern)
-        if err != nil {
-            log.Printf("Pattern %s cannot be compiled into a regexp. Error: %s", pattern, err)
-            continue
-        }
-        compiledRegExp = append(compiledRegExp, re)
-    }
-
-    msgWords := strings.Split(text, " ")
-    for _, word := range msgWords {
-        for _, re := range compiledRegExp {
-            if re.MatchString(strings.ToLower(word)) {
-                log.Printf("Word %s matched regexp %s", word, re)
-                return true
-            }
-        }
-    }
-    log.Printf("None of the words in text: %s; matched patterns %s", text, patterns)
-    return false
-}
-
 func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI, cfg Config) {
+    // register all handlers
+    handlers := make([]cmd.CommandHandler, 0, 10)
+    handlers = append(handlers, cmd.NewKittiesHandler(), cmd.NewWeatherHandler(cfg.Weather.Token))
+
+    context := cmd.Context{}
+    context.Owners = append(context.Owners, cfg.Owners.ID[0])
+
     for update := range *updates {
         if update.Message == nil {
             log.Print("Message: empty. Skipping");
@@ -70,35 +50,27 @@ func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI, cfg 
         }
 
         dumpMessage(update)
+        for _, handler := range(handlers) {
+            result, err := handler.HandleMsg(&update, context)
+            if err != nil {
+                log.Printf("Handler could not handle message with text '%s' due to erros: %s", update.Message.Text, err)
+                // going further - maybe we have something to reply to a user
+            }
 
-        if msgMatches(update.Message.Text, kittiesWords) {
-            log.Printf("Message from %s with text %s contains one of kitties words", update.Message.From.UserName, update.Message.Text)
-            newMsg, err := sendKitties(update)
-            if err != nil {
-                log.Printf("Cannot create a message with kitties due to error: %s", err)
+            if result == nil {
+                // do nothing - this handler didn't handle this message
                 continue
             }
-            _, err = bot.Send(newMsg)
-            if err != nil {
-                log.Printf("Cannot reply with a kitty pic due to error: %s", err)
-                continue
+
+            log.Printf("Message with text '%s' has been handled by some handler", update.Message.Text)
+            if result.Reply != nil {
+                _, err = bot.Send(result.Reply)
+                if err != nil {
+                    log.Printf("Cannot reply with a weather due to error: %s", err)
+                    continue
+                }
+                log.Print("Reply has been sent!")
             }
-            log.Print("Message with kitties has been sent!")
-        }
-        // TODO: duplication. Think how to use some OOP here
-        if msgMatches(update.Message.Text,weatherWords) {
-            log.Printf("Message from %s with text %s contains one of weather words", update.Message.From.UserName, update.Message.Text)
-            newMsg, err := sendWeather(update, cfg)
-            if err != nil {
-                log.Printf("Cannot create a message with weather due to error: %s", err)
-                continue
-            }
-            _, err = bot.Send(newMsg)
-            if err != nil {
-                log.Printf("Cannot reply with a weather due to error: %s", err)
-                continue
-            }
-            log.Print("Message with weather has been sent!")
         }
     }
 }
