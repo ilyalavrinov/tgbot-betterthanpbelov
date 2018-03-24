@@ -4,6 +4,15 @@ import "gopkg.in/telegram-bot-api.v4"
 
 type Context struct {
     Owners []string // TODO: maybe pass full cfg
+
+    BotMessage bool
+}
+
+func NewContext(owners []string) Context {
+    ctx := Context{}
+    ctx.Owners = append([]string{}, owners...)
+    ctx.BotMessage = false
+    return ctx
 }
 
 type Result struct {

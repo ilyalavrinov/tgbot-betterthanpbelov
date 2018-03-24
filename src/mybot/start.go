@@ -1,6 +1,7 @@
 package mybot
 
 import "log"
+import "regexp"
 import "gopkg.in/telegram-bot-api.v4"
 
 import "./commandhandler"
@@ -35,6 +36,23 @@ func dumpMessage(update tgbotapi.Update) {
     log.Printf("Message.NewChatMembers: %+v", update.Message.NewChatMembers)
 }
 
+func modifyContext(context cmd.Context, update tgbotapi.Update) cmd.Context {
+    ctx := context
+
+    matched, err := regexp.MatchString("бот", update.Message.Text)
+    if err != nil {
+        log.Printf("Error '%s' happened during parsing message '%s' for bot-explicit keywords", err, update.Message.Text)
+        return ctx
+    }
+
+    if matched {
+        log.Printf("Bot explicit command is discovered in message '%s'", update.Message.Text)
+        ctx.BotMessage = true
+    }
+
+    return ctx
+}
+
 func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI, cfg Config) {
     // register all handlers
     handlers := make([]cmd.CommandHandler, 0, 10)
@@ -42,8 +60,7 @@ func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI, cfg 
                                 cmd.NewWeatherHandler(cfg.Weather.Token),
                                 cmd.NewDeathHandler())
 
-    context := cmd.Context{}
-    context.Owners = append(context.Owners, cfg.Owners.ID[0])
+    context := cmd.NewContext([]string{cfg.Owners.ID[0]})
 
     isRunning := true
 
@@ -54,8 +71,11 @@ func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI, cfg 
         }
 
         dumpMessage(update)
+
+        ctx := modifyContext(context, update)
+
         for _, handler := range(handlers) {
-            result, err := handler.HandleMsg(&update, context)
+            result, err := handler.HandleMsg(&update, ctx)
             if err != nil {
                 log.Printf("Handler could not handle message with text '%s' due to erros: %s", update.Message.Text, err)
                 // going further - maybe we have something to reply to a user
