@@ -38,10 +38,14 @@ func dumpMessage(update tgbotapi.Update) {
 func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI, cfg Config) {
     // register all handlers
     handlers := make([]cmd.CommandHandler, 0, 10)
-    handlers = append(handlers, cmd.NewKittiesHandler(), cmd.NewWeatherHandler(cfg.Weather.Token))
+    handlers = append(handlers, cmd.NewKittiesHandler(),
+                                cmd.NewWeatherHandler(cfg.Weather.Token),
+                                cmd.NewDeathHandler())
 
     context := cmd.Context{}
     context.Owners = append(context.Owners, cfg.Owners.ID[0])
+
+    isRunning := true
 
     for update := range *updates {
         if update.Message == nil {
@@ -71,6 +75,15 @@ func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI, cfg 
                 }
                 log.Print("Reply has been sent!")
             }
+            if result.BotToStop == true {
+                log.Print("Bot stop has been requested")
+                isRunning = false
+            }
+        }
+
+        if isRunning == false {
+            log.Print("Aborting main cycle")
+            break
         }
     }
 }
