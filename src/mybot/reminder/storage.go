@@ -6,7 +6,6 @@ import "time"
 type Storage struct {
     Future []Record
     Pending []Record  // need to send them
-    Archive []Record
 }
 
 func NewStorage() *Storage {
@@ -14,12 +13,12 @@ func NewStorage() *Storage {
 
     storage.Future = make([]Record, 0)
     storage.Pending = make([]Record, 0)
-    storage.Archive = make([]Record, 0)
 
     return storage
 }
 
 func (storage *Storage) MoveToPending(t time.Time) {
+    log.Printf("Starting moving everything to pending")
     newFuture := make([]Record, 0, len(storage.Pending))
     for _, record := range storage.Future {
         if record.Time.Before(t) {
@@ -34,8 +33,12 @@ func (storage *Storage) MoveToPending(t time.Time) {
     log.Printf("After moving there are %d items in Future, %d items need to be sent", len(storage.Future), len(storage.Pending))
 }
 
-func (storage *Storage) AddReminder(userId, msgId int, t time.Time) {
-    record := NewRecord(userId, msgId, t)
+func (storage *Storage) AddReminder(userId, msgId int, chatId int64, t time.Time) {
+    record := NewRecord(userId, msgId, chatId, t)
     storage.Future = append(storage.Future, *record)
     log.Printf("A new record has been added to reminder storage for user %d to be executed at %s", userId, t)
+}
+
+func (storage *Storage) ResetPending() {
+    storage.Pending = make([]Record, 0)
 }

@@ -5,6 +5,7 @@ import "regexp"
 import "gopkg.in/telegram-bot-api.v4"
 
 import "./commandhandler"
+import "./common"
 
 // panics internally if something goes wrong
 func setupBot(botToken string) (*tgbotapi.BotAPI, *tgbotapi.UpdatesChannel) {
@@ -54,60 +55,71 @@ func modifyContext(context cmd.Context, update tgbotapi.Update) cmd.Context {
 }
 
 func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI, cfg Config) {
+    notificationChannel := make(chan common.Notification)
+
     // register all handlers
     handlers := make([]cmd.CommandHandler, 0, 10)
     handlers = append(handlers, cmd.NewKittiesHandler(),
                                 cmd.NewWeatherHandler(cfg.Weather.Token),
                                 cmd.NewForecastHandler(cfg.Weather.Token),
                                 cmd.NewDeathHandler(),
-                                cmd.NewRemindHandler())
+                                cmd.NewRemindHandler(notificationChannel))
 
     context := cmd.NewContext([]string{cfg.Owners.ID[0]})
 
     isRunning := true
 
-    for update := range *updates {
-        if update.Message == nil {
-            log.Print("Message: empty. Skipping");
-            continue
-        }
-
-        dumpMessage(update)
-
-        ctx := modifyContext(context, update)
-
-        for _, handler := range(handlers) {
-            result, err := handler.HandleMsg(&update, ctx)
-            if err != nil {
-                log.Printf("Handler could not handle message with text '%s' due to erros: %s", update.Message.Text, err)
-                // going further - maybe we have something to reply to a user
-            }
-
-            if result == nil {
-                // do nothing - this handler didn't handle this message
-                continue
-            }
-
-            log.Printf("Message with text '%s' has been handled by some handler", update.Message.Text)
-            if result.Reply != nil {
-                _, err = bot.Send(result.Reply)
-                if err != nil {
-                    log.Printf("Cannot reply with a weather due to error: %s", err)
+    for isRunning {
+        select {
+            case update := <-*updates:
+                log.Printf("Received an update from tgbotapi")
+                // TODO: move to a function
+                if update.Message == nil {
+                    log.Print("Message: empty. Skipping");
                     continue
                 }
-                log.Print("Reply has been sent!")
-            }
-            if result.BotToStop == true {
-                log.Print("Bot stop has been requested")
-                isRunning = false
-            }
-        }
+                dumpMessage(update)
+                ctx := modifyContext(context, update)
+                for _, handler := range(handlers) {
+                    result, err := handler.HandleMsg(&update, ctx)
+                    if err != nil {
+                        log.Printf("Handler could not handle message with text '%s' due to erros: %s", update.Message.Text, err)
+                        // going further - maybe we have something to reply to a user
+                    }
 
-        if isRunning == false {
-            log.Print("Aborting main cycle")
-            break
+                    if result == nil {
+                        // do nothing - this handler didn't handle this message
+                        continue
+                    }
+
+                    log.Printf("Message with text '%s' has been handled by some handler", update.Message.Text)
+                    if result.Reply != nil {
+                        _, err = bot.Send(result.Reply)
+                        if err != nil {
+                            log.Printf("Cannot reply with a message due to error: %s", err)
+                            continue
+                        }
+                        log.Print("Reply has been sent!")
+                    }
+                    if result.BotToStop == true {
+                        log.Print("Bot stop has been requested")
+                        isRunning = false
+                    }
+                }
+
+            case notification := <-notificationChannel:
+                log.Printf("A new notification from internals has been received")
+                message := tgbotapi.NewMessage(notification.ChatId, notification.Msg)
+                message.BaseChat.ReplyToMessageID = notification.ReplyTo_MsgId
+                _, err := bot.Send(message)
+                if err != nil {
+                    log.Printf("Cannot reply with a notification due to error: %s", err)
+                    continue
+                }
         }
     }
+
+    log.Print("Main cycle has been aborted")
 }
 
 func Start(cfg_filename string) error {

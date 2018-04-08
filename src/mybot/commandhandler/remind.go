@@ -1,6 +1,7 @@
 package cmd
 
 import "../reminder"
+import "../common"
 import "log"
 import "regexp"
 import "time"
@@ -12,9 +13,12 @@ type remindHandler struct {
     storage *reminder.Storage
 }
 
-func NewRemindHandler() *remindHandler {
+func NewRemindHandler(notifChan chan<- common.Notification) *remindHandler {
     handler := &remindHandler{}
     handler.storage = reminder.NewStorage()
+
+    go SendNotifications(handler.storage, notifChan)
+
     return handler
 }
 
@@ -74,7 +78,23 @@ func (handler *remindHandler) HandleMsg(msg *tgbotapi.Update, ctx Context) (*Res
         return nil, err
     }
 
-    handler.storage.AddReminder(msg.Message.From.ID, msg.Message.MessageID, t)
+    handler.storage.AddReminder(msg.Message.From.ID, msg.Message.MessageID, msg.Message.Chat.ID, t)
 
     return nil, nil
+}
+
+
+func SendNotifications(storage *reminder.Storage, notifChan chan<- common.Notification) {
+    for true {
+        time.Sleep(30 * time.Second)
+        storage.MoveToPending(time.Now())
+        for _, record := range storage.Pending {
+            notification := common.NewNotification(record.UserId,
+                                                   "Напоминаю",
+                                                   record.MsgId,
+                                                   record.ChatId)
+            notifChan<- *notification
+        }
+        storage.ResetPending()
+    }
 }
