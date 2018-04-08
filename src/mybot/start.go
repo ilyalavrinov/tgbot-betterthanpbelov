@@ -59,7 +59,8 @@ func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI, cfg 
     handlers = append(handlers, cmd.NewKittiesHandler(),
                                 cmd.NewWeatherHandler(cfg.Weather.Token),
                                 cmd.NewForecastHandler(cfg.Weather.Token),
-                                cmd.NewDeathHandler())
+                                cmd.NewDeathHandler(),
+                                cmd.NewRemindHandler())
 
     context := cmd.NewContext([]string{cfg.Owners.ID[0]})
 
