@@ -3,6 +3,8 @@ package cmd
 import "fmt"
 import "log"
 import "time"
+import "regexp"
+import "strings"
 import "encoding/json"
 import "net/http"
 import "io/ioutil"
@@ -10,7 +12,17 @@ import "gopkg.in/telegram-bot-api.v4"
 
 
 // city IDs: bulk.openweathermap.org/sample/city.list.json.gz
-var cityID = map[string]int {"NN": 520555, "SPb": 98817}
+const (
+    cityNN = 520555
+    citySPb = 498817
+)
+
+const (
+    EmojiSunny = '\u2600'
+    EmojiCloudy = '\u2601'
+    EmojiRainy = '\u2602' // TODO: find correct code
+    EmojiWindy = '\u2603' // TODO: find correct code
+)
 
 func requestData(reqType string, cityId int, apiKey string) []byte {
     weather_url := fmt.Sprintf("http://api.openweathermap.org/data/2.5/%s?id=%d&APPID=%s&lang=ru&units=metric", reqType,
@@ -49,7 +61,7 @@ type weatherData struct {
     }
 }
 
-var weatherWords = []string{"^погода*", "^холодно*", "^жарко*"}
+var weatherWords = []string{"^погода*"}
 
 type weatherHandler struct {
     token string
@@ -66,7 +78,7 @@ func (handler *weatherHandler) HandleMsg (msg *tgbotapi.Update, ctx Context) (*R
         return nil, nil
     }
 
-    bytes := requestData("weather", cityID["NN"], handler.token)
+    bytes := requestData("weather", cityNN, handler.token)
 
     result := NewResult()
 
@@ -90,9 +102,14 @@ func (handler *weatherHandler) HandleMsg (msg *tgbotapi.Update, ctx Context) (*R
 
 
 var forecastWords = []string{"^прогноз*"}
-const timeFormat = "2006-01-02 15:04:05"
+const timeFormat_API = "2006-01-02 15:04:05"
+const timeFormat_Out_Date = "Mon, 02 Jan"
+const timeFormat_Out_Time = "15:04"
 
 type forecastData struct {
+    City struct {
+        Name string
+    }
     List []struct {
         DT_txt string
         Weather []struct {
@@ -115,11 +132,29 @@ func NewForecastHandler(token string) *forecastHandler {
 }
 
 func (handler *forecastHandler) HandleMsg(msg *tgbotapi.Update, ctx Context) (*Result, error) {
-    if !msgMatches(msg.Message.Text, forecastWords) {
+    text := msg.Message.Text
+    if !msgMatches(text, forecastWords) {
         return nil, nil
     }
 
-    bytes := requestData("forecast", cityID["NN"], handler.token)
+    targetCity := cityNN
+
+    // TODO: move to a common function for all weather handlers
+    reInCity := regexp.MustCompile("в ([\\wА-Яа-я]+)")
+    if reInCity.MatchString(text) {
+        log.Printf("Message '%s' matches 'in city' regexp %s", text, reInCity)
+        matches := reInCity.FindStringSubmatch(text)
+        city := matches[1] // ([\wА-Яа-я]+)
+        city = strings.ToLower(city)
+
+        reCitySPb := regexp.MustCompile("питер|спб")
+        if reCitySPb.MatchString(city) {
+            log.Printf("Switching target city to SPb")
+            targetCity = citySPb
+        }
+    }
+
+    bytes := requestData("forecast", targetCity, handler.token)
 
     result := NewResult()
 
@@ -132,8 +167,21 @@ func (handler *forecastHandler) HandleMsg(msg *tgbotapi.Update, ctx Context) (*R
         return &result, err
     }
 
-    target_day := time.Now()
-    if target_day.Hour() > 18 {
+    now := time.Now()
+    target_day := now
+    reTomorrow := regexp.MustCompile("завтра")
+    reDayAfterTomorrow := regexp.MustCompile("послезавтра")
+    if reDayAfterTomorrow.MatchString(text) {  // DayAfterTomorrow should go first as simple Tomorrow is a substring
+        log.Printf("Forecast is requested for the day after tomorrow")
+        target_day = time.Date(target_day.Year(), target_day.Month(), target_day.Day() + 2,
+                               0, 0, 0, 0, time.Local)
+    } else if reTomorrow.MatchString(text) {
+        log.Printf("Forecast is requested for tomorrow")
+        target_day = time.Date(target_day.Year(), target_day.Month(), target_day.Day() + 1,
+                               0, 0, 0, 0, time.Local)
+    }
+
+    if (target_day == now) && (target_day.Hour() > 18) {
         log.Printf("Today (%s) is too late for the forecast, switching to tomorrow", target_day)
         target_day = time.Date(target_day.Year(), target_day.Month(), target_day.Day() + 1,
                                0, 0, 0, 0, time.Local)
@@ -148,7 +196,7 @@ func (handler *forecastHandler) HandleMsg(msg *tgbotapi.Update, ctx Context) (*R
 
     forecasts := make([]string, 0, 4)  // 4 since it is usually no more than 4 forecasts
     for _, val := range forecast_data.List {
-        t, err := time.Parse(timeFormat, val.DT_txt)
+        t, err := time.Parse(timeFormat_API, val.DT_txt)
         if err != nil {
           log.Printf("Error while parsing date: %s; error: %s", val.DT_txt, err)
           continue
@@ -158,10 +206,18 @@ func (handler *forecastHandler) HandleMsg(msg *tgbotapi.Update, ctx Context) (*R
           log.Printf("Skipping date: %s", t)
           continue
         }
-        log.Printf("Forecast: %s, %.1f, %s", t, val.Main.Temp, val.Weather[0].Description)
-        forecasts = append(forecasts, fmt.Sprintf("%s: температура %.1f, %s", t.Format(timeFormat), val.Main.Temp, val.Weather[0].Description))
+        log.Printf("Forecast: %s,t = %.1f, %s", t, val.Main.Temp, val.Weather[0].Description)
+        forecasts = append(forecasts, fmt.Sprintf("%s: %.1f\u2103, %s", t.Format(timeFormat_Out_Time), val.Main.Temp, val.Weather[0].Description))
     }
-    forecast_msg := "Прогнозирую:\n"
+
+    if len(forecasts) == 0 {
+        log.Printf("Something went wrong - no forecast")
+        msg := tgbotapi.NewMessage(msg.Message.Chat.ID, "Я не смог сделать прогноз :(")
+        result.Reply = msg
+        return &result, err
+    }
+
+    forecast_msg := fmt.Sprintf("Прогнозирую на %s в %s:\n", target_day.Format(timeFormat_Out_Date), forecast_data.City.Name)
     for _, forecast := range forecasts {
         forecast_msg += forecast
         forecast_msg += "\n"
