@@ -3,16 +3,43 @@ package mybot
 import "log"
 import "regexp"
 import "gopkg.in/telegram-bot-api.v4"
+import "golang.org/x/net/proxy"
+import "net/http"
 
 import "./commandhandler"
 import "./common"
 
 // panics internally if something goes wrong
-func setupBot(botToken string) (*tgbotapi.BotAPI, *tgbotapi.UpdatesChannel) {
+func setupBot(cfg Config) (*tgbotapi.BotAPI, *tgbotapi.UpdatesChannel) {
+    botToken := cfg.TGBot.Token
     log.Printf("Setting up a bot with token: %s", botToken)
-    bot, err := tgbotapi.NewBotAPI(botToken)
-    if err != nil {
-        log.Panic(err)
+
+    var bot *tgbotapi.BotAPI = nil
+    server := cfg.Proxy_SOCKS5.Server
+    user := cfg.Proxy_SOCKS5.User
+    pass := cfg.Proxy_SOCKS5.Pass
+    if server != "" {
+        log.Printf("Proxy is set, connecting to '%s' with credentials '%s':'%s'", server, user, pass)
+        auth := proxy.Auth { User: user,
+                             Password: pass}
+        dialer, err := proxy.SOCKS5("tcp", server, &auth, proxy.Direct)
+        if err != nil {
+            log.Panicf("Could get proxy dialer, error: %s", err)
+        }
+        httpTransport := &http.Transport{}
+        httpTransport.Dial = dialer.Dial
+        httpClient := &http.Client{Transport: httpTransport}
+        bot, err = tgbotapi.NewBotAPIWithClient(botToken, httpClient)
+        if err != nil {
+            log.Panicf("Could not connect via proxy, error: %s", err)
+        }
+    } else {
+        log.Printf("No proxy is set, going without any proxy")
+        var err error
+        bot, err = tgbotapi.NewBotAPI(botToken)
+        if err != nil {
+            log.Panicf("Could not connect directly, error: %s", err)
+        }
     }
 
     log.Printf("Authorized on account %s", bot.Self.UserName)
@@ -133,7 +160,7 @@ func Start(cfg_filename string) error {
 
     log.Printf("Starting bot with config: %+v", cfg)
 
-    bot, updates := setupBot(cfg.TGBot.Token);
+    bot, updates := setupBot(cfg);
     //go askPBelovForDate(bot)
     executeUpdates(updates, bot, cfg)
 

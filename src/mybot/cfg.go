@@ -14,6 +14,12 @@ type Config struct {
     Owners struct {
         ID []string
     }
+
+    Proxy_SOCKS5 struct {
+        Server string
+        User string
+        Pass string
+    }
 }
 
 func NewConfig(filename string) (Config, error) {
