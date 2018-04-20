@@ -33,14 +33,21 @@ func NewPicCache(cacheName string) PicCache {
                 location:  path.Join(home_dir, cache_dir, cache_pic_subdir, cacheName),
                 filenames: make([]string, 0, 100),
                 curPos: 0,
-                loadBatchSize: 20,
-                loadLowLimit: 5}
+                loadBatchSize: 5,
+                loadLowLimit: 2}
 
-    err := os.MkdirAll(cache.location, os.ModePerm)
+    err := os.RemoveAll(cache.location)
+    if err != nil {
+        log.Fatalf("Could not remove contents of cache storage directory '%s' due to error: %s", cache.location, err)
+    }
+
+    err = os.MkdirAll(cache.location, os.ModePerm)
     if err != nil {
         log.Fatalf("Could not create cache storage directory at '%s' due to error: %s", cache.location, err)
     }
     log.Printf("New cache has been requested for '%s'; final location: %s", cache.name, cache.location)
+
+    loadMoreKitties(cache.location, cache.loadBatchSize)
 
     fs_files, err := ioutil.ReadDir(cache.location)
     if err != nil {
