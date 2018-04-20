@@ -88,7 +88,6 @@ func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI, cfg 
     handlers := make([]cmd.CommandHandler, 0, 10)
     handlers = append(handlers, cmd.NewKittiesHandler(),
                                 cmd.NewWeatherHandler(cfg.Weather.Token),
-                                cmd.NewForecastHandler(cfg.Weather.Token),
                                 cmd.NewDeathHandler(),
                                 cmd.NewRemindHandler(notificationChannel))
 
