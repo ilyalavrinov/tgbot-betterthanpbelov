@@ -7,7 +7,11 @@ import "regexp"
 import "time"
 import "strconv"
 import "errors"
+import "fmt"
 import "gopkg.in/telegram-bot-api.v4"
+
+
+const timeFormat_Out_Confirm = "2006-01-02 15:04:05"
 
 type remindHandler struct {
     storage *reminder.Storage
@@ -25,7 +29,7 @@ func NewRemindHandler(notifChan chan<- common.Notification) *remindHandler {
 var reminderWords = []string {"напомни"}
 
 func determineReminderTime(msg string) (time.Time, error) {
-    reAfter := regexp.MustCompile("через (\\d+) ([\\wа-я]+)")
+    reAfter := regexp.MustCompile("через (\\d*) *([\\wа-я]+)")
     // TODO: uncomment during implementation
     //reAt := regexp.MustCompile("в (\\d{1,2}):(\\d{1,2})")
     //reTomorrow := regexp.MustCompile("завтра")
@@ -39,7 +43,12 @@ func determineReminderTime(msg string) (time.Time, error) {
         timeQuantity := matches[1] // (\d+)
         timePeriod := matches[2] // ([\wа-я]+)
 
-        q, _ := strconv.Atoi(timeQuantity)
+        log.Printf("Reminder command matched: quantity '%s' period '%s'", timeQuantity, timePeriod)
+
+        var q int = 1
+        if (len(timeQuantity) > 0) {
+            q, _ = strconv.Atoi(timeQuantity)
+        }
         period := time.Minute
         matchedMinute, _ := regexp.MatchString("минут", timePeriod)
         matchedHour, _ := regexp.MatchString("час", timePeriod)
@@ -80,7 +89,13 @@ func (handler *remindHandler) HandleMsg(msg *tgbotapi.Update, ctx Context) (*Res
 
     handler.storage.AddReminder(msg.Message.From.ID, msg.Message.MessageID, msg.Message.Chat.ID, t)
 
-    return nil, nil
+    replyText := fmt.Sprintf("Принято, напомню около %s", t.Format(timeFormat_Out_Confirm))
+    replyMsg := tgbotapi.NewMessage(msg.Message.Chat.ID, replyText)
+    replyMsg.BaseChat.ReplyToMessageID = msg.Message.MessageID
+
+    result := NewResult()
+    result.Reply = replyMsg
+    return &result, nil
 }
 
 
