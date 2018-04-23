@@ -231,6 +231,8 @@ func (handler *weatherHandler) HandleMsg (msg *tgbotapi.Update, ctx Context) (*R
     }
 
     result := NewResult()
-    result.Reply = tgbotapi.NewMessage(msg.Message.Chat.ID, replyMsg)
+    reply := tgbotapi.NewMessage(msg.Message.Chat.ID, replyMsg)
+    reply.BaseChat.ReplyToMessageID = msg.Message.MessageID
+    result.Reply = reply
     return &result, err
 }

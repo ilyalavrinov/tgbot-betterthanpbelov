@@ -153,6 +153,7 @@ func (handler *kittiesHandler) HandleMsg(msg *tgbotapi.Update, ctx Context) (*Re
     }
 
     picMsg := tgbotapi.NewPhotoUpload(msg.Message.Chat.ID, handler.cache.GetNext())
+    picMsg.BaseFile.BaseChat.ReplyToMessageID = msg.Message.MessageID
 
     result := NewResult()
     result.Reply = &picMsg
