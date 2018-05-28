@@ -9,6 +9,7 @@ import "encoding/json"
 import "net/http"
 import "io/ioutil"
 import "gopkg.in/telegram-bot-api.v4"
+import "github.com/go-redis/redis"
 
 
 // city IDs: bulk.openweathermap.org/sample/city.list.json.gz
@@ -17,6 +18,10 @@ const (
     citySPb = 498817
 )
 
+var reToday *regexp.Regexp = regexp.MustCompile("сегодня")
+var reDayAfterTomorrow *regexp.Regexp = regexp.MustCompile("послезавтра")
+var reTomorrow *regexp.Regexp = regexp.MustCompile("завтра")
+
 const (
     EmojiSunny = '\u2600'
     EmojiCloudy = '\u2601'
@@ -24,7 +29,7 @@ const (
     EmojiWindy = '\u2603' // TODO: find correct code
 )
 
-func requestData(reqType string, cityId int, apiKey string) []byte {
+func requestData(reqType string, cityId int64, apiKey string) []byte {
     weather_url := fmt.Sprintf("http://api.openweathermap.org/data/2.5/%s?id=%d&APPID=%s&lang=ru&units=metric", reqType,
                                                                                                                 cityId,
                                                                                                                 apiKey)
@@ -48,33 +53,40 @@ func requestData(reqType string, cityId int, apiKey string) []byte {
 }
 
 
-func determineCity(text string) int {
-    var targetCity int = cityNN
+func (h *weatherHandler) determineCity(text string) (int64, error) {
+    var targetCity int64 = cityNN
 
-    reInCity := regexp.MustCompile("в ([\\wА-Яа-я]+)")
+    reInCity := regexp.MustCompile("(в|in) ([\\wA-Za-zА-Яа-я]+)")
     if reInCity.MatchString(text) {
         log.Printf("Message '%s' matches 'in city' regexp %s", text, reInCity)
         matches := reInCity.FindStringSubmatch(text)
-        city := matches[1] // ([\wА-Яа-я]+)
+        city := matches[2]
         city = strings.ToLower(city)
 
-        reCitySPb := regexp.MustCompile("питер|спб")
-        if reCitySPb.MatchString(city) {
-            log.Printf("Switching target city to SPb")
-            targetCity = citySPb
+        key := fmt.Sprintf("openweathermap:city:%s", city)
+        result := h.redisconn.HGet(key, "id")
+        if result.Err() != nil {
+            log.Printf("Could HGet for key '%s', error: %s", key, result.Err())
+            return 0, result.Err()
         }
+
+        cityId, err := result.Int64()
+        if err != nil {
+            log.Printf("Could not convert ID for key '%s' into int, error: %s", key, err)
+            return 0, err
+        }
+        targetCity = cityId
+        log.Printf("City ID for %s is %d", city, targetCity)
     }
 
-    return targetCity
+    log.Printf("City ID is %d", targetCity)
+    return targetCity, nil
 }
 
 func determineDate(text string) *time.Time {
     now := time.Now()
     target_day := now
 
-    reToday := regexp.MustCompile("сегодня")
-    reDayAfterTomorrow := regexp.MustCompile("послезавтра")
-    reTomorrow := regexp.MustCompile("завтра")
     if reDayAfterTomorrow.MatchString(text) {  // DayAfterTomorrow should go first as simple Tomorrow is a substring
         log.Printf("Forecast is requested for the day after tomorrow")
         target_day = time.Date(now.Year(), now.Month(), now.Day() + 2,
@@ -125,7 +137,7 @@ type forecastData struct {
     }
 }
 
-func getCurrentWeather(token string, cityId int) (string, error) {
+func getCurrentWeather(token string, cityId int64) (string, error) {
     bytes := requestData("weather", cityId, token)
 
     weather_data := weatherData{}
@@ -142,7 +154,7 @@ func getCurrentWeather(token string, cityId int) (string, error) {
     return weather_msg, nil
 }
 
-func getForecast(token string, cityId int, date time.Time) (string, error) {
+func getForecast(token string, cityId int64, date time.Time) (string, error) {
     log.Printf("Checking for upcoming weather in city %d", cityId)
     bytes := requestData("forecast", cityId, token)
 
@@ -200,15 +212,17 @@ const timeFormat_API = "2006-01-02 15:04:05"
 const timeFormat_Out_Date = "Mon, 02 Jan"
 const timeFormat_Out_Time = "15:04"
 
-var weatherWords = []string{"^погода"}
+var weatherWords = []string{"^погода", "^weather"}
 
 type weatherHandler struct {
     token string
+    redisconn *redis.Client
 }
 
-func NewWeatherHandler(token string) CommandHandler {
+func NewWeatherHandler(token string, opts redis.Options) CommandHandler {
     handler := weatherHandler{}
     handler.token = token
+    handler.redisconn = redis.NewClient(&opts)
     return &handler
 }
 
@@ -218,11 +232,19 @@ func (handler *weatherHandler) HandleMsg (msg *tgbotapi.Update, ctx Context) (*R
         return nil, nil
     }
 
-    cityId := determineCity(text)
     date := determineDate(text)
+    cityId, err := handler.determineCity(text)
+    if err != nil {
+        log.Printf("Could not determine city from message '%s' due to error: '%s'", text, err)
+
+        result := NewResult()
+        reply := tgbotapi.NewMessage(msg.Message.Chat.ID, fmt.Sprintf("Не смог распарсить город :("))
+        result.Reply = reply
+        reply.BaseChat.ReplyToMessageID = msg.Message.MessageID
+        return &result, err
+    }
 
     var replyMsg string
-    var err error
 
     if date == nil {
         replyMsg, err = getCurrentWeather(handler.token, cityId)

@@ -11,3 +11,7 @@ id = ilyalavrinov
 server = 127.0.0.1:8081
 user = ilyalavrinov
 pass = ilyalavrinov
+
+[redis]
+server = 127.0.0.1:6379
+db-common = 0

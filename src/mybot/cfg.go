@@ -20,6 +20,11 @@ type Config struct {
         User string
         Pass string
     }
+
+    Redis struct {
+        Server string
+        DB_Common int
+    }
 }
 
 func NewConfig(filename string) (Config, error) {

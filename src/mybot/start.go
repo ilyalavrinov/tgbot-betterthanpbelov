@@ -5,6 +5,7 @@ import "regexp"
 import "gopkg.in/telegram-bot-api.v4"
 import "golang.org/x/net/proxy"
 import "net/http"
+import "github.com/go-redis/redis"
 
 import "./commandhandler"
 import "./common"
@@ -84,10 +85,15 @@ func modifyContext(context cmd.Context, update tgbotapi.Update) cmd.Context {
 func executeUpdates(updates *tgbotapi.UpdatesChannel, bot *tgbotapi.BotAPI, cfg Config) {
     notificationChannel := make(chan common.Notification)
 
+    // TODO: move it into headers - need to give full cfg to handler
+    opts := redis.Options {
+        Addr: cfg.Redis.Server,
+        DB: cfg.Redis.DB_Common }
+
     // register all handlers
     handlers := make([]cmd.CommandHandler, 0, 10)
     handlers = append(handlers, cmd.NewKittiesHandler(),
-                                cmd.NewWeatherHandler(cfg.Weather.Token),
+                                cmd.NewWeatherHandler(cfg.Weather.Token, opts),
                                 cmd.NewDeathHandler(),
                                 cmd.NewRemindHandler(notificationChannel))
 
