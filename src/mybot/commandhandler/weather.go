@@ -8,6 +8,7 @@ import "strings"
 import "encoding/json"
 import "net/http"
 import "io/ioutil"
+import "github.com/admirallarimda/tgbot-base"
 import "gopkg.in/telegram-bot-api.v4"
 import "github.com/go-redis/redis"
 
@@ -22,12 +23,6 @@ var reToday *regexp.Regexp = regexp.MustCompile("сегодня")
 var reDayAfterTomorrow *regexp.Regexp = regexp.MustCompile("послезавтра")
 var reTomorrow *regexp.Regexp = regexp.MustCompile("завтра")
 
-const (
-    EmojiSunny = '\u2600'
-    EmojiCloudy = '\u2601'
-    EmojiRainy = '\u2602' // TODO: find correct code
-    EmojiWindy = '\u2603' // TODO: find correct code
-)
 
 func requestData(reqType string, cityId int64, apiKey string) []byte {
     weather_url := fmt.Sprintf("http://api.openweathermap.org/data/2.5/%s?id=%d&APPID=%s&lang=ru&units=metric", reqType,
@@ -215,46 +210,49 @@ const timeFormat_Out_Time = "15:04"
 var weatherWords = []string{"^погода", "^weather"}
 
 type weatherHandler struct {
+    botbase.BaseHandler
     token string
     redisconn *redis.Client
 }
 
-func NewWeatherHandler(token string, opts redis.Options) CommandHandler {
+func NewWeatherHandler(token string, opts redis.Options) botbase.IncomingMessageHandler {
     handler := weatherHandler{}
     handler.token = token
-    handler.redisconn = redis.NewClient(&opts)
+    //handler.redisconn = redis.NewClient(&opts)
     return &handler
 }
 
-func (handler *weatherHandler) HandleMsg (msg *tgbotapi.Update, ctx Context) (*Result, error) {
-    text := msg.Message.Text
-    if !msgMatches(text, weatherWords) {
-        return nil, nil
-    }
+func (h *weatherHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<- botbase.ServiceMsg) botbase.HandlerTrigger {
+    h.OutMsgCh = outMsgCh
+    return botbase.HandlerTrigger{Re: regexp.MustCompile("^погода")}
+}
+
+func (h *weatherHandler) Name() string {
+    return "weather"
+}
+
+func (h *weatherHandler) HandleOne(msg tgbotapi.Message) {
+    text := msg.Text
 
     date := determineDate(text)
-    cityId, err := handler.determineCity(text)
+    cityID, err := h.determineCity(text)
     if err != nil {
         log.Printf("Could not determine city from message '%s' due to error: '%s'", text, err)
 
-        result := NewResult()
-        reply := tgbotapi.NewMessage(msg.Message.Chat.ID, fmt.Sprintf("Не смог распарсить город :("))
-        result.Reply = reply
-        reply.BaseChat.ReplyToMessageID = msg.Message.MessageID
-        return &result, err
+        reply := tgbotapi.NewMessage(msg.Chat.ID, fmt.Sprintf("Не смог распарсить город :("))
+        reply.BaseChat.ReplyToMessageID = msg.MessageID
+        h.OutMsgCh<- reply
     }
 
     var replyMsg string
 
     if date == nil {
-        replyMsg, err = getCurrentWeather(handler.token, cityId)
+        replyMsg, err = getCurrentWeather(h.token, cityID)
     } else {
-        replyMsg, err = getForecast(handler.token, cityId, *date)
+        replyMsg, err = getForecast(h.token, cityID, *date)
     }
 
-    result := NewResult()
-    reply := tgbotapi.NewMessage(msg.Message.Chat.ID, replyMsg)
-    reply.BaseChat.ReplyToMessageID = msg.Message.MessageID
-    result.Reply = reply
-    return &result, err
+    reply := tgbotapi.NewMessage(msg.Chat.ID, replyMsg)
+    reply.BaseChat.ReplyToMessageID = msg.MessageID
+    h.OutMsgCh<- reply
 }

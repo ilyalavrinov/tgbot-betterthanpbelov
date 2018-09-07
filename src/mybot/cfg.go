@@ -1,29 +1,17 @@
 package mybot
 
+import "github.com/admirallarimda/tgbot-base"
 import "gopkg.in/gcfg.v1"
 import "log"
 
 type Config struct {
-    TGBot struct {
-        Token string
-    }
+    botbase.Config
     Weather struct {
         Token string
     }
 
     Owners struct {
         ID []string
-    }
-
-    Proxy_SOCKS5 struct {
-        Server string
-        User string
-        Pass string
-    }
-
-    Redis struct {
-        Server string
-        DB_Common int
     }
 }
 
@@ -38,6 +26,6 @@ func NewConfig(filename string) (Config, error) {
         return cfg, err
     }
 
-    log.Printf("Configuration has been successfully read from %s: %s", filename, cfg)
+    log.Printf("Configuration has been successfully read from %s: %+v", filename, cfg)
     return cfg, nil
 }
