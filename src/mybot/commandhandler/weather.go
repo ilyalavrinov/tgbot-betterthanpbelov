@@ -215,10 +215,13 @@ type weatherHandler struct {
     redisconn *redis.Client
 }
 
-func NewWeatherHandler(token string, opts redis.Options) botbase.IncomingMessageHandler {
+func NewWeatherHandler(token string, pool botbase.RedisPool) botbase.IncomingMessageHandler {
     handler := weatherHandler{}
     handler.token = token
-    //handler.redisconn = redis.NewClient(&opts)
+    handler.redisconn = pool.GetConnByName("openweathermap")
+    if handler.redisconn == nil {
+        log.Panicf("Could not get connection to Redis")
+    }
     return &handler
 }
 

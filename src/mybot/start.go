@@ -2,7 +2,6 @@ package mybot
 
 import "log"
 import "github.com/admirallarimda/tgbot-base"
-import "github.com/go-redis/redis"
 
 import "./commandhandler"
 
@@ -20,7 +19,11 @@ func Start(cfg_filename string) error {
     tgcfg := botbase.Config{TGBot: fullcfg.TGBot,
                             Proxy_SOCKS5: fullcfg.Proxy_SOCKS5}
     bot := botbase.NewBot(tgcfg)
-    bot.AddHandler(botbase.NewIncomingMessageDealer(cmd.NewWeatherHandler(fullcfg.Weather.Token, redis.Options{})))
+
+    rediscfg := fullcfg.Redis
+    redispool := botbase.NewRedisPool(rediscfg)
+
+    bot.AddHandler(botbase.NewIncomingMessageDealer(cmd.NewWeatherHandler(fullcfg.Weather.Token, redispool)))
     /*     handlers = append(handlers, cmd.NewKittiesHandler(),
                                     cmd.NewWeatherHandler(cfg.Weather.Token, opts),
                                     cmd.NewDeathHandler(),

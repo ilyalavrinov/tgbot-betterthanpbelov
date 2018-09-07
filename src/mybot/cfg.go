@@ -6,6 +6,7 @@ import "log"
 
 type Config struct {
     botbase.Config
+    Redis botbase.RedisConfig
     Weather struct {
         Token string
     }
