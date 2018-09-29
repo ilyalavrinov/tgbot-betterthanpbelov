@@ -12,17 +12,11 @@ import "github.com/admirallarimda/tgbot-base"
 import "gopkg.in/telegram-bot-api.v4"
 import "github.com/go-redis/redis"
 
-// city IDs: bulk.openweathermap.org/sample/city.list.json.gz
-const (
-	cityNN  = 520555
-	citySPb = 498817
-)
-
 var reToday *regexp.Regexp = regexp.MustCompile("сегодня")
 var reDayAfterTomorrow *regexp.Regexp = regexp.MustCompile("послезавтра")
 var reTomorrow *regexp.Regexp = regexp.MustCompile("завтра")
 
-func requestData(reqType string, cityId int64, apiKey string) []byte {
+func requestData(reqType string, cityId int64, apiKey string) ([]byte, error) {
 	weather_url := fmt.Sprintf("http://api.openweathermap.org/data/2.5/%s?id=%d&APPID=%s&lang=ru&units=metric", reqType,
 		cityId,
 		apiKey)
@@ -31,48 +25,55 @@ func requestData(reqType string, cityId int64, apiKey string) []byte {
 	resp, err := http.Get(weather_url)
 	if err != nil {
 		log.Printf("Could not get data from '%s' due to error: %s", weather_url, err)
-		return []byte{}
+		return []byte{}, err
 	}
 	defer resp.Body.Close()
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("Could not read response body from '%s' due to error: %s", weather_url, err)
-		return []byte{}
+		return []byte{}, err
 	}
 
 	log.Printf("Weather response: %s", string(bodyBytes))
 
-	return bodyBytes
+	return bodyBytes, nil
 }
 
-func (h *weatherHandler) determineCity(text string) (int64, error) {
-	var targetCity int64 = cityNN
+func (h *weatherHandler) determineCity(msg tgbotapi.Message) (int64, error) {
+	city := ""
 
 	reInCity := regexp.MustCompile("(в|in) ([\\wA-Za-zА-Яа-я]+)")
+	text := msg.Text
 	if reInCity.MatchString(text) {
 		log.Printf("Message '%s' matches 'in city' regexp %s", text, reInCity)
 		matches := reInCity.FindStringSubmatch(text)
-		city := matches[2]
-		city = strings.ToLower(city)
-
-		key := fmt.Sprintf("openweathermap:city:%s", city)
-		result := h.redisconn.HGet(key, "id")
-		if result.Err() != nil {
-			log.Printf("Could HGet for key '%s', error: %s", key, result.Err())
-			return 0, result.Err()
-		}
-
-		cityId, err := result.Int64()
+		city = matches[2]
+	} else {
+		var err error
+		city, err = h.properties.GetProperty("city", botbase.UserID(msg.From.ID), botbase.ChatID(msg.Chat.ID))
 		if err != nil {
-			log.Printf("Could not convert ID for key '%s' into int, error: %s", key, err)
+			log.Printf("Could not get weather city property due to error: %s", err)
 			return 0, err
 		}
-		targetCity = cityId
-		log.Printf("City ID for %s is %d", city, targetCity)
 	}
 
-	log.Printf("City ID is %d", targetCity)
-	return targetCity, nil
+	city = strings.ToLower(city)
+
+	key := fmt.Sprintf("openweathermap:city:%s", city)
+	result := h.redisconn.HGet(key, "id")
+	if result.Err() != nil {
+		log.Printf("Could not HGet for key '%s', error: %s", key, result.Err())
+		return 0, result.Err()
+	}
+
+	cityId, err := result.Int64()
+	if err != nil {
+		log.Printf("Could not convert ID for key '%s' into int, error: %s", key, err)
+		return 0, err
+	}
+	log.Printf("City ID for %s is %d", city, cityId)
+
+	return cityId, nil
 }
 
 func determineDate(text string) *time.Time {
@@ -101,6 +102,7 @@ func determineDate(text string) *time.Time {
 }
 
 type weatherData struct {
+	Cod  int
 	Main struct {
 		Temp float64
 	}
@@ -129,12 +131,15 @@ type forecastData struct {
 }
 
 func getCurrentWeather(token string, cityId int64) (string, error) {
-	bytes := requestData("weather", cityId, token)
+	bytes, err := requestData("weather", cityId, token)
+	if err != nil {
+		return "", nil
+	}
 
 	weather_data := weatherData{}
-	err := json.Unmarshal(bytes, &weather_data)
+	err = json.Unmarshal(bytes, &weather_data)
 	//err = json.NewDecoder(resp.Body).Decode(&weather_data)
-	if err != nil {
+	if err != nil || weather_data.Cod != 200 {
 		return "Я не смог распарсить погоду :(", err
 	}
 
@@ -147,10 +152,13 @@ func getCurrentWeather(token string, cityId int64) (string, error) {
 
 func getForecast(token string, cityId int64, date time.Time) (string, error) {
 	log.Printf("Checking for upcoming weather in city %d", cityId)
-	bytes := requestData("forecast", cityId, token)
+	bytes, err := requestData("forecast", cityId, token)
+	if err != nil {
+		return "", err
+	}
 
 	forecast_data := forecastData{}
-	err := json.Unmarshal(bytes, &forecast_data)
+	err = json.Unmarshal(bytes, &forecast_data)
 	//err = json.NewDecoder(resp.Body).Decode(&weather_data)
 	if err != nil {
 		return "Я не смог распарсить прогноз :(", err
@@ -207,14 +215,16 @@ var weatherWords = []string{"^погода", "^weather"}
 
 type weatherHandler struct {
 	botbase.BaseHandler
-	token     string
-	redisconn *redis.Client
+	token      string
+	redisconn  *redis.Client
+	properties botbase.PropertyStorage
 }
 
-func NewWeatherHandler(token string, pool botbase.RedisPool) botbase.IncomingMessageHandler {
+func NewWeatherHandler(token string, pool botbase.RedisPool, properties botbase.PropertyStorage) botbase.IncomingMessageHandler {
 	handler := weatherHandler{}
 	handler.token = token
 	handler.redisconn = pool.GetConnByName("openweathermap")
+	handler.properties = properties
 	if handler.redisconn == nil {
 		log.Panicf("Could not get connection to Redis")
 	}
@@ -234,13 +244,14 @@ func (h *weatherHandler) HandleOne(msg tgbotapi.Message) {
 	text := msg.Text
 
 	date := determineDate(text)
-	cityID, err := h.determineCity(text)
+	cityID, err := h.determineCity(msg)
 	if err != nil {
 		log.Printf("Could not determine city from message '%s' due to error: '%s'", text, err)
 
 		reply := tgbotapi.NewMessage(msg.Chat.ID, fmt.Sprintf("Не смог распарсить город :("))
 		reply.BaseChat.ReplyToMessageID = msg.MessageID
 		h.OutMsgCh <- reply
+		return
 	}
 
 	var replyMsg string
