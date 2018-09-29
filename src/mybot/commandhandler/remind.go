@@ -10,106 +10,104 @@ import "errors"
 import "fmt"
 import "gopkg.in/telegram-bot-api.v4"
 
-
 const timeFormat_Out_Confirm = "2006-01-02 15:04:05"
 
 type remindHandler struct {
-    storage *reminder.Storage
+	storage *reminder.Storage
 }
 
 func NewRemindHandler(notifChan chan<- common.Notification) *remindHandler {
-    handler := &remindHandler{}
-    handler.storage = reminder.NewStorage()
+	handler := &remindHandler{}
+	handler.storage = reminder.NewStorage()
 
-    go SendNotifications(handler.storage, notifChan)
+	go SendNotifications(handler.storage, notifChan)
 
-    return handler
+	return handler
 }
 
-var reminderWords = []string {"напомни"}
+var reminderWords = []string{"напомни"}
 
 func determineReminderTime(msg string) (time.Time, error) {
-    reAfter := regexp.MustCompile("через (\\d*) *([\\wа-я]+)")
-    // TODO: uncomment during implementation
-    //reAt := regexp.MustCompile("в (\\d{1,2}):(\\d{1,2})")
-    //reTomorrow := regexp.MustCompile("завтра")
-    //reDayAfterTomorrow := regexp.MustCompile("послезавтра")
-    // TODO: add days of week parsing
+	reAfter := regexp.MustCompile("через (\\d*) *([\\wа-я]+)")
+	// TODO: uncomment during implementation
+	//reAt := regexp.MustCompile("в (\\d{1,2}):(\\d{1,2})")
+	//reTomorrow := regexp.MustCompile("завтра")
+	//reDayAfterTomorrow := regexp.MustCompile("послезавтра")
+	// TODO: add days of week parsing
 
-    now := time.Now()
-    if reAfter.MatchString(msg) {
-        log.Printf("Message '%s' matches 'after' regexp %s", msg, reAfter)
-        matches := reAfter.FindStringSubmatch(msg)
-        timeQuantity := matches[1] // (\d+)
-        timePeriod := matches[2] // ([\wа-я]+)
+	now := time.Now()
+	if reAfter.MatchString(msg) {
+		log.Printf("Message '%s' matches 'after' regexp %s", msg, reAfter)
+		matches := reAfter.FindStringSubmatch(msg)
+		timeQuantity := matches[1] // (\d+)
+		timePeriod := matches[2]   // ([\wа-я]+)
 
-        log.Printf("Reminder command matched: quantity '%s' period '%s'", timeQuantity, timePeriod)
+		log.Printf("Reminder command matched: quantity '%s' period '%s'", timeQuantity, timePeriod)
 
-        var q int = 1
-        if (len(timeQuantity) > 0) {
-            q, _ = strconv.Atoi(timeQuantity)
-        }
-        period := time.Minute
-        matchedMinute, _ := regexp.MatchString("минут", timePeriod)
-        matchedHour, _ := regexp.MatchString("час", timePeriod)
-        matchedDay, _ := regexp.MatchString("дней", timePeriod)
-        if matchedMinute {
-            period = time.Minute
-        } else if matchedHour {
-            period = time.Hour
-        } else if matchedDay {
-            period = 24 * time.Hour
-        } else {
-            log.Printf("Time period %s doesn't match any known format", timePeriod)
-            err := errors.New("Time period doesn't match any known")
-            return now, err
-        }
+		var q int = 1
+		if len(timeQuantity) > 0 {
+			q, _ = strconv.Atoi(timeQuantity)
+		}
+		period := time.Minute
+		matchedMinute, _ := regexp.MatchString("минут", timePeriod)
+		matchedHour, _ := regexp.MatchString("час", timePeriod)
+		matchedDay, _ := regexp.MatchString("дней", timePeriod)
+		if matchedMinute {
+			period = time.Minute
+		} else if matchedHour {
+			period = time.Hour
+		} else if matchedDay {
+			period = 24 * time.Hour
+		} else {
+			log.Printf("Time period %s doesn't match any known format", timePeriod)
+			err := errors.New("Time period doesn't match any known")
+			return now, err
+		}
 
-        return now.Add(period * time.Duration(q)), nil
-    }
+		return now.Add(period * time.Duration(q)), nil
+	}
 
-    return now, nil
+	return now, nil
 }
 
 func (handler *remindHandler) HandleMsg(msg *tgbotapi.Update, ctx Context) (*Result, error) {
-    if !ctx.BotMessage {
-        log.Printf("Message '%s' is not designated for bot manipulation, will not check for reminder", msg.Message.Text)
-        return nil, nil
-    }
+	if !ctx.BotMessage {
+		log.Printf("Message '%s' is not designated for bot manipulation, will not check for reminder", msg.Message.Text)
+		return nil, nil
+	}
 
-    if !msgMatches(msg.Message.Text, reminderWords) {
-        return nil, nil
-    }
+	if !msgMatches(msg.Message.Text, reminderWords) {
+		return nil, nil
+	}
 
-    t, err := determineReminderTime(msg.Message.Text)
-    if err != nil {
-        log.Printf("Could not determine time from message '%s' with error: %s", msg.Message.Text, err)
-        return nil, err
-    }
+	t, err := determineReminderTime(msg.Message.Text)
+	if err != nil {
+		log.Printf("Could not determine time from message '%s' with error: %s", msg.Message.Text, err)
+		return nil, err
+	}
 
-    handler.storage.AddReminder(msg.Message.From.ID, msg.Message.MessageID, msg.Message.Chat.ID, t)
+	handler.storage.AddReminder(msg.Message.From.ID, msg.Message.MessageID, msg.Message.Chat.ID, t)
 
-    replyText := fmt.Sprintf("Принято, напомню около %s", t.Format(timeFormat_Out_Confirm))
-    replyMsg := tgbotapi.NewMessage(msg.Message.Chat.ID, replyText)
-    replyMsg.BaseChat.ReplyToMessageID = msg.Message.MessageID
+	replyText := fmt.Sprintf("Принято, напомню около %s", t.Format(timeFormat_Out_Confirm))
+	replyMsg := tgbotapi.NewMessage(msg.Message.Chat.ID, replyText)
+	replyMsg.BaseChat.ReplyToMessageID = msg.Message.MessageID
 
-    result := NewResult()
-    result.Reply = replyMsg
-    return &result, nil
+	result := NewResult()
+	result.Reply = replyMsg
+	return &result, nil
 }
 
-
 func SendNotifications(storage *reminder.Storage, notifChan chan<- common.Notification) {
-    for true {
-        time.Sleep(30 * time.Second)
-        storage.MoveToPending(time.Now())
-        for _, record := range storage.Pending {
-            notification := common.NewNotification(record.UserId,
-                                                   "Напоминаю",
-                                                   record.MsgId,
-                                                   record.ChatId)
-            notifChan<- *notification
-        }
-        storage.ResetPending()
-    }
+	for true {
+		time.Sleep(30 * time.Second)
+		storage.MoveToPending(time.Now())
+		for _, record := range storage.Pending {
+			notification := common.NewNotification(record.UserId,
+				"Напоминаю",
+				record.MsgId,
+				record.ChatId)
+			notifChan <- *notification
+		}
+		storage.ResetPending()
+	}
 }
