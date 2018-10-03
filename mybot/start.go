@@ -3,7 +3,7 @@ package mybot
 import "log"
 import "github.com/admirallarimda/tgbot-base"
 
-import "./commandhandler"
+import "github.com/admirallarimda/tgbot-betterthanpbelov/mybot/commandhandler"
 
 func Start(cfg_filename string) error {
 	log.Print("Starting my bot")

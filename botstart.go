@@ -1,6 +1,6 @@
 package main
 
-import "./mybot"
+import "github.com/admirallarimda/tgbot-betterthanpbelov/mybot"
 import "log"
 import "math/rand"
 import "time"

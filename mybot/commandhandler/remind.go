@@ -1,7 +1,7 @@
 package cmd
 
-import "../reminder"
-import "../common"
+import "github.com/admirallarimda/tgbot-betterthanpbelov/mybot/reminder"
+import "github.com/admirallarimda/tgbot-betterthanpbelov/mybot/common"
 import "log"
 import "regexp"
 import "time"
