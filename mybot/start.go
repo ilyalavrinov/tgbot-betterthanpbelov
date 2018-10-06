@@ -24,8 +24,11 @@ func Start(cfg_filename string) error {
 	redispool := botbase.NewRedisPool(rediscfg)
 	propstorage := botbase.NewRedisPropertyStorage(redispool)
 
+	cron := botbase.NewCron()
+
 	bot.AddHandler(botbase.NewIncomingMessageDealer(cmd.NewWeatherHandler(fullcfg.Weather.Token, redispool, propstorage)))
 	bot.AddHandler(botbase.NewIncomingMessageDealer(cmd.NewPropertyHandler(propstorage)))
+	bot.AddHandler(botbase.NewIncomingMessageDealer(cmd.NewRemindHandler(cron)))
 	/*     handlers = append(handlers, cmd.NewKittiesHandler(),
 	       cmd.NewWeatherHandler(cfg.Weather.Token, opts),
 	       cmd.NewDeathHandler(),

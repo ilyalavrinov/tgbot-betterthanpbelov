@@ -1,7 +1,6 @@
 package cmd
 
-import "github.com/admirallarimda/tgbot-betterthanpbelov/mybot/reminder"
-import "github.com/admirallarimda/tgbot-betterthanpbelov/mybot/common"
+import "github.com/admirallarimda/tgbot-base"
 import "log"
 import "regexp"
 import "time"
@@ -12,20 +11,31 @@ import "gopkg.in/telegram-bot-api.v4"
 
 const timeFormat_Out_Confirm = "2006-01-02 15:04:05"
 
-type remindHandler struct {
-	storage *reminder.Storage
+type remindCronJob struct {
+	outMsgCh chan<- tgbotapi.MessageConfig
+
+	chatID     int64
+	text       string
+	replyMsgID int
 }
 
-func NewRemindHandler(notifChan chan<- common.Notification) *remindHandler {
-	handler := &remindHandler{}
-	handler.storage = reminder.NewStorage()
+func (j *remindCronJob) Do(scheduled time.Time, cron botbase.Cron) {
+	msg := tgbotapi.NewMessage(j.chatID, j.text)
+	msg.BaseChat.ReplyToMessageID = j.replyMsgID
 
-	go SendNotifications(handler.storage, notifChan)
+	j.outMsgCh <- msg
+}
+
+type remindHandler struct {
+	botbase.BaseHandler
+	cron botbase.Cron
+}
+
+func NewRemindHandler(cron botbase.Cron) *remindHandler {
+	handler := &remindHandler{cron: cron}
 
 	return handler
 }
-
-var reminderWords = []string{"напомни"}
 
 func determineReminderTime(msg string) (time.Time, error) {
 	reAfter := regexp.MustCompile("через (\\d*) *([\\wа-я]+)")
@@ -70,44 +80,30 @@ func determineReminderTime(msg string) (time.Time, error) {
 	return now, nil
 }
 
-func (handler *remindHandler) HandleMsg(msg *tgbotapi.Update, ctx Context) (*Result, error) {
-	if !ctx.BotMessage {
-		log.Printf("Message '%s' is not designated for bot manipulation, will not check for reminder", msg.Message.Text)
-		return nil, nil
-	}
-
-	if !msgMatches(msg.Message.Text, reminderWords) {
-		return nil, nil
-	}
-
-	t, err := determineReminderTime(msg.Message.Text)
+func (h *remindHandler) HandleOne(msg tgbotapi.Message) {
+	t, err := determineReminderTime(msg.Text)
 	if err != nil {
-		log.Printf("Could not determine time from message '%s' with error: %s", msg.Message.Text, err)
-		return nil, err
+		log.Printf("Could not determine time from message '%s' with error: %s", msg.Text, err)
 	}
 
-	handler.storage.AddReminder(msg.Message.From.ID, msg.Message.MessageID, msg.Message.Chat.ID, t)
-
+	job := remindCronJob{
+		outMsgCh:   h.OutMsgCh,
+		chatID:     msg.Chat.ID,
+		text:       "Напоминаю",
+		replyMsgID: msg.MessageID}
+	h.cron.AddJob(t, &job)
 	replyText := fmt.Sprintf("Принято, напомню около %s", t.Format(timeFormat_Out_Confirm))
-	replyMsg := tgbotapi.NewMessage(msg.Message.Chat.ID, replyText)
-	replyMsg.BaseChat.ReplyToMessageID = msg.Message.MessageID
+	replyMsg := tgbotapi.NewMessage(msg.Chat.ID, replyText)
+	replyMsg.BaseChat.ReplyToMessageID = msg.MessageID
+	h.OutMsgCh <- replyMsg
 
-	result := NewResult()
-	result.Reply = replyMsg
-	return &result, nil
 }
 
-func SendNotifications(storage *reminder.Storage, notifChan chan<- common.Notification) {
-	for true {
-		time.Sleep(30 * time.Second)
-		storage.MoveToPending(time.Now())
-		for _, record := range storage.Pending {
-			notification := common.NewNotification(record.UserId,
-				"Напоминаю",
-				record.MsgId,
-				record.ChatId)
-			notifChan <- *notification
-		}
-		storage.ResetPending()
-	}
+func (h *remindHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<- botbase.ServiceMsg) botbase.HandlerTrigger {
+	h.OutMsgCh = outMsgCh
+	return botbase.NewHandlerTrigger(nil, []string{"remind", "todo"})
+}
+
+func (h *remindHandler) Name() string {
+	return "reminder"
 }
