@@ -13,26 +13,38 @@ const timeFormat_Out_Confirm = "2006-01-02 15:04:05"
 
 type remindCronJob struct {
 	outMsgCh chan<- tgbotapi.MessageConfig
+	storage  ReminderStorage
 
-	chatID     int64
-	text       string
-	replyMsgID int
+	reminder Reminder
+}
+
+func newRemindCronJob(storage ReminderStorage, outMsgCh chan<- tgbotapi.MessageConfig, reminder Reminder) remindCronJob {
+	job := remindCronJob{
+		outMsgCh: outMsgCh,
+		storage:  storage,
+		reminder: reminder}
+	storage.AddReminder(reminder)
+	return job
 }
 
 func (j *remindCronJob) Do(scheduled time.Time, cron botbase.Cron) {
-	msg := tgbotapi.NewMessage(j.chatID, j.text)
-	msg.BaseChat.ReplyToMessageID = j.replyMsgID
+	msg := tgbotapi.NewMessage(int64(j.reminder.chat), "Напоминаю")
+	msg.BaseChat.ReplyToMessageID = j.reminder.replyTo
 
 	j.outMsgCh <- msg
+	j.storage.RemoveReminder(j.reminder)
 }
 
 type remindHandler struct {
 	botbase.BaseHandler
-	cron botbase.Cron
+	cron    botbase.Cron
+	storage ReminderStorage
 }
 
-func NewRemindHandler(cron botbase.Cron) *remindHandler {
-	handler := &remindHandler{cron: cron}
+func NewRemindHandler(cron botbase.Cron, storage ReminderStorage) *remindHandler {
+	handler := &remindHandler{
+		cron:    cron,
+		storage: storage}
 
 	return handler
 }
@@ -86,12 +98,12 @@ func (h *remindHandler) HandleOne(msg tgbotapi.Message) {
 		log.Printf("Could not determine time from message '%s' with error: %s", msg.Text, err)
 	}
 
-	job := remindCronJob{
-		outMsgCh:   h.OutMsgCh,
-		chatID:     msg.Chat.ID,
-		text:       "Напоминаю",
-		replyMsgID: msg.MessageID}
+	job := newRemindCronJob(h.storage, h.OutMsgCh, Reminder{
+		chat:    botbase.ChatID(msg.Chat.ID),
+		replyTo: msg.MessageID,
+		t:       t})
 	h.cron.AddJob(t, &job)
+
 	replyText := fmt.Sprintf("Принято, напомню около %s", t.Format(timeFormat_Out_Confirm))
 	replyMsg := tgbotapi.NewMessage(msg.Chat.ID, replyText)
 	replyMsg.BaseChat.ReplyToMessageID = msg.MessageID
@@ -101,6 +113,13 @@ func (h *remindHandler) HandleOne(msg tgbotapi.Message) {
 
 func (h *remindHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<- botbase.ServiceMsg) botbase.HandlerTrigger {
 	h.OutMsgCh = outMsgCh
+
+	allReminders := h.storage.LoadAll()
+	for _, r := range allReminders {
+		job := newRemindCronJob(h.storage, outMsgCh, r)
+		h.cron.AddJob(r.t, &job)
+	}
+
 	return botbase.NewHandlerTrigger(nil, []string{"remind", "todo"})
 }
 
