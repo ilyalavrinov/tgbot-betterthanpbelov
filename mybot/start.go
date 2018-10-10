@@ -1,7 +1,7 @@
 package mybot
 
 import "log"
-import "github.com/admirallarimda/tgbot-base"
+import "github.com/admirallarimda/tgbotbase"
 
 import "github.com/admirallarimda/tgbot-betterthanpbelov/mybot/commandhandler"
 
@@ -16,20 +16,20 @@ func Start(cfg_filename string) error {
 
 	log.Printf("Starting bot with full config: %+v", fullcfg)
 
-	tgcfg := botbase.Config{TGBot: fullcfg.TGBot,
+	tgcfg := tgbotbase.Config{TGBot: fullcfg.TGBot,
 		Proxy_SOCKS5: fullcfg.Proxy_SOCKS5}
-	bot := botbase.NewBot(tgcfg)
+	bot := tgbotbase.NewBot(tgcfg)
 
 	rediscfg := fullcfg.Redis
-	redispool := botbase.NewRedisPool(rediscfg)
-	propstorage := botbase.NewRedisPropertyStorage(redispool)
+	redispool := tgbotbase.NewRedisPool(rediscfg)
+	propstorage := tgbotbase.NewRedisPropertyStorage(redispool)
 	remindstorage := cmd.NewRedisReminderStorage(redispool)
 
-	cron := botbase.NewCron()
+	cron := tgbotbase.NewCron()
 
-	bot.AddHandler(botbase.NewIncomingMessageDealer(cmd.NewWeatherHandler(fullcfg.Weather.Token, redispool, propstorage)))
-	bot.AddHandler(botbase.NewIncomingMessageDealer(cmd.NewPropertyHandler(propstorage)))
-	bot.AddHandler(botbase.NewIncomingMessageDealer(cmd.NewRemindHandler(cron, remindstorage)))
+	bot.AddHandler(tgbotbase.NewIncomingMessageDealer(cmd.NewWeatherHandler(fullcfg.Weather.Token, redispool, propstorage)))
+	bot.AddHandler(tgbotbase.NewIncomingMessageDealer(cmd.NewPropertyHandler(propstorage)))
+	bot.AddHandler(tgbotbase.NewIncomingMessageDealer(cmd.NewRemindHandler(cron, remindstorage)))
 	/*     handlers = append(handlers, cmd.NewKittiesHandler(),
 	       cmd.NewWeatherHandler(cfg.Weather.Token, opts),
 	       cmd.NewDeathHandler(),

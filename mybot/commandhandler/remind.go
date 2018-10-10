@@ -1,6 +1,6 @@
 package cmd
 
-import "github.com/admirallarimda/tgbot-base"
+import "github.com/admirallarimda/tgbotbase"
 import "log"
 import "regexp"
 import "time"
@@ -27,7 +27,7 @@ func newRemindCronJob(storage ReminderStorage, outMsgCh chan<- tgbotapi.MessageC
 	return job
 }
 
-func (j *remindCronJob) Do(scheduled time.Time, cron botbase.Cron) {
+func (j *remindCronJob) Do(scheduled time.Time, cron tgbotbase.Cron) {
 	msg := tgbotapi.NewMessage(int64(j.reminder.chat), "Напоминаю")
 	msg.BaseChat.ReplyToMessageID = j.reminder.replyTo
 
@@ -36,12 +36,12 @@ func (j *remindCronJob) Do(scheduled time.Time, cron botbase.Cron) {
 }
 
 type remindHandler struct {
-	botbase.BaseHandler
-	cron    botbase.Cron
+	tgbotbase.BaseHandler
+	cron    tgbotbase.Cron
 	storage ReminderStorage
 }
 
-func NewRemindHandler(cron botbase.Cron, storage ReminderStorage) *remindHandler {
+func NewRemindHandler(cron tgbotbase.Cron, storage ReminderStorage) *remindHandler {
 	handler := &remindHandler{
 		cron:    cron,
 		storage: storage}
@@ -99,7 +99,7 @@ func (h *remindHandler) HandleOne(msg tgbotapi.Message) {
 	}
 
 	job := newRemindCronJob(h.storage, h.OutMsgCh, Reminder{
-		chat:    botbase.ChatID(msg.Chat.ID),
+		chat:    tgbotbase.ChatID(msg.Chat.ID),
 		replyTo: msg.MessageID,
 		t:       t})
 	h.cron.AddJob(t, &job)
@@ -111,7 +111,7 @@ func (h *remindHandler) HandleOne(msg tgbotapi.Message) {
 
 }
 
-func (h *remindHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<- botbase.ServiceMsg) botbase.HandlerTrigger {
+func (h *remindHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<- tgbotbase.ServiceMsg) tgbotbase.HandlerTrigger {
 	h.OutMsgCh = outMsgCh
 
 	allReminders := h.storage.LoadAll()
@@ -120,7 +120,7 @@ func (h *remindHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<
 		h.cron.AddJob(r.t, &job)
 	}
 
-	return botbase.NewHandlerTrigger(nil, []string{"remind", "todo"})
+	return tgbotbase.NewHandlerTrigger(nil, []string{"remind", "todo"})
 }
 
 func (h *remindHandler) Name() string {

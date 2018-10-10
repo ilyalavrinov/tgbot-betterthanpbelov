@@ -8,7 +8,7 @@ import "errors"
 import "log"
 
 import "github.com/go-redis/redis"
-import "github.com/admirallarimda/tgbot-base"
+import "github.com/admirallarimda/tgbotbase"
 
 var remindStart time.Time = time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
 
@@ -16,7 +16,7 @@ type RedisReminderStorage struct {
 	client *redis.Client
 }
 
-func NewRedisReminderStorage(pool botbase.RedisPool) ReminderStorage {
+func NewRedisReminderStorage(pool tgbotbase.RedisPool) ReminderStorage {
 	s := RedisReminderStorage{client: pool.GetConnByName("reminder")}
 	return &s
 }
@@ -52,7 +52,7 @@ func keyToReminder(key string) (*Reminder, error) {
 	}
 	return &Reminder{
 		t:       t,
-		chat:    botbase.ChatID(chat),
+		chat:    tgbotbase.ChatID(chat),
 		replyTo: replyTo}, nil
 }
 
@@ -65,7 +65,7 @@ func (s *RedisReminderStorage) RemoveReminder(r Reminder) {
 }
 
 func (s *RedisReminderStorage) LoadAll() []Reminder {
-	keys, err := botbase.GetAllKeys(s.client, "reminder:*")
+	keys, err := tgbotbase.GetAllKeys(s.client, "reminder:*")
 	if err != nil {
 		log.Printf("redisReminder: could not load stored reminders due to error: %s", err)
 		return nil

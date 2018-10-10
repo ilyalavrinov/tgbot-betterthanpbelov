@@ -1,11 +1,11 @@
 package cmd
 
 import "time"
-import "github.com/admirallarimda/tgbot-base"
+import "github.com/admirallarimda/tgbotbase"
 
 type Reminder struct {
 	t       time.Time
-	chat    botbase.ChatID
+	chat    tgbotbase.ChatID
 	replyTo int // message ID
 }
 

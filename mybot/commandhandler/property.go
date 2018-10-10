@@ -3,22 +3,22 @@ package cmd
 import "log"
 import "strings"
 import "gopkg.in/telegram-bot-api.v4"
-import "github.com/admirallarimda/tgbot-base"
+import "github.com/admirallarimda/tgbotbase"
 
 type propertyHandler struct {
-	storage botbase.PropertyStorage
+	storage tgbotbase.PropertyStorage
 }
 
-var _ botbase.IncomingMessageHandler = &propertyHandler{}
+var _ tgbotbase.IncomingMessageHandler = &propertyHandler{}
 
-func NewPropertyHandler(storage botbase.PropertyStorage) *propertyHandler {
+func NewPropertyHandler(storage tgbotbase.PropertyStorage) *propertyHandler {
 	return &propertyHandler{storage: storage}
 }
 
 func (h *propertyHandler) HandleOne(msg tgbotapi.Message) {
 	args := msg.CommandArguments()
-	user := botbase.UserID(msg.From.ID)
-	chat := botbase.ChatID(msg.Chat.ID)
+	user := tgbotbase.UserID(msg.From.ID)
+	chat := tgbotbase.ChatID(msg.Chat.ID)
 
 	splits := strings.SplitN(args, " ", 2)
 	if len(splits) != 2 {
@@ -38,8 +38,8 @@ func (h *propertyHandler) HandleOne(msg tgbotapi.Message) {
 	}
 }
 
-func (h *propertyHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<- botbase.ServiceMsg) botbase.HandlerTrigger {
-	return botbase.NewHandlerTrigger(nil, []string{"propset", "propsetchat"})
+func (h *propertyHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<- tgbotbase.ServiceMsg) tgbotbase.HandlerTrigger {
+	return tgbotbase.NewHandlerTrigger(nil, []string{"propset", "propsetchat"})
 }
 
 func (h *propertyHandler) Name() string {

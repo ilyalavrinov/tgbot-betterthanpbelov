@@ -1,12 +1,12 @@
 package mybot
 
-import "github.com/admirallarimda/tgbot-base"
+import "github.com/admirallarimda/tgbotbase"
 import "gopkg.in/gcfg.v1"
 import "log"
 
 type Config struct {
-	botbase.Config
-	Redis   botbase.RedisConfig
+	tgbotbase.Config
+	Redis   tgbotbase.RedisConfig
 	Weather struct {
 		Token string
 	}

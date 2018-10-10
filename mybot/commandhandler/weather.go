@@ -8,7 +8,7 @@ import "strings"
 import "encoding/json"
 import "net/http"
 import "io/ioutil"
-import "github.com/admirallarimda/tgbot-base"
+import "github.com/admirallarimda/tgbotbase"
 import "gopkg.in/telegram-bot-api.v4"
 import "github.com/go-redis/redis"
 
@@ -50,7 +50,7 @@ func (h *weatherHandler) determineCity(msg tgbotapi.Message) (int64, error) {
 		city = matches[2]
 	} else {
 		var err error
-		city, err = h.properties.GetProperty("city", botbase.UserID(msg.From.ID), botbase.ChatID(msg.Chat.ID))
+		city, err = h.properties.GetProperty("city", tgbotbase.UserID(msg.From.ID), tgbotbase.ChatID(msg.Chat.ID))
 		if err != nil {
 			log.Printf("Could not get weather city property due to error: %s", err)
 			return 0, err
@@ -214,13 +214,13 @@ const timeFormat_Out_Time = "15:04"
 var weatherWords = []string{"^погода", "^weather"}
 
 type weatherHandler struct {
-	botbase.BaseHandler
+	tgbotbase.BaseHandler
 	token      string
 	redisconn  *redis.Client
-	properties botbase.PropertyStorage
+	properties tgbotbase.PropertyStorage
 }
 
-func NewWeatherHandler(token string, pool botbase.RedisPool, properties botbase.PropertyStorage) botbase.IncomingMessageHandler {
+func NewWeatherHandler(token string, pool tgbotbase.RedisPool, properties tgbotbase.PropertyStorage) tgbotbase.IncomingMessageHandler {
 	handler := weatherHandler{}
 	handler.token = token
 	handler.redisconn = pool.GetConnByName("openweathermap")
@@ -231,9 +231,9 @@ func NewWeatherHandler(token string, pool botbase.RedisPool, properties botbase.
 	return &handler
 }
 
-func (h *weatherHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<- botbase.ServiceMsg) botbase.HandlerTrigger {
+func (h *weatherHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<- tgbotbase.ServiceMsg) tgbotbase.HandlerTrigger {
 	h.OutMsgCh = outMsgCh
-	return botbase.NewHandlerTrigger(regexp.MustCompile("^погода"), nil)
+	return tgbotbase.NewHandlerTrigger(regexp.MustCompile("^погода"), nil)
 }
 
 func (h *weatherHandler) Name() string {
