@@ -9,7 +9,7 @@ import "errors"
 import "fmt"
 import "gopkg.in/telegram-bot-api.v4"
 
-const timeFormat_Out_Confirm = "2006-01-02 15:04:05"
+const timeFormat_Out_Confirm = "2006-01-02 15:04:05 MST"
 
 type remindCronJob struct {
 	outMsgCh chan<- tgbotapi.MessageConfig
