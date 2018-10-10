@@ -37,14 +37,16 @@ func (j *remindCronJob) Do(scheduled time.Time, cron tgbotbase.Cron) {
 
 type remindHandler struct {
 	tgbotbase.BaseHandler
-	cron    tgbotbase.Cron
-	storage ReminderStorage
+	cron       tgbotbase.Cron
+	storage    ReminderStorage
+	properties tgbotbase.PropertyStorage
 }
 
-func NewRemindHandler(cron tgbotbase.Cron, storage ReminderStorage) *remindHandler {
+func NewRemindHandler(cron tgbotbase.Cron, storage ReminderStorage, properties tgbotbase.PropertyStorage) *remindHandler {
 	handler := &remindHandler{
-		cron:    cron,
-		storage: storage}
+		cron:       cron,
+		storage:    storage,
+		properties: properties}
 
 	return handler
 }
@@ -74,21 +76,21 @@ func determineReminderTime(msg string) (time.Time, error) {
 		matchedMinute, _ := regexp.MatchString("минут", timePeriod)
 		matchedHour, _ := regexp.MatchString("час", timePeriod)
 		matchedDay, _ := regexp.MatchString("день|дня|дней", timePeriod)
-        matchedWeek, _ := regexp.MatchString("недел", timePeriod)
-        matchedMonth, _ := regexp.MatchString("месяц", timePeriod)
-        matchedYear, _ := regexp.MatchString("год|лет", timePeriod)
+		matchedWeek, _ := regexp.MatchString("недел", timePeriod)
+		matchedMonth, _ := regexp.MatchString("месяц", timePeriod)
+		matchedYear, _ := regexp.MatchString("год|лет", timePeriod)
 		if matchedMinute {
 			period = time.Minute
 		} else if matchedHour {
 			period = time.Hour
 		} else if matchedDay {
 			period = 24 * time.Hour
-        } else if matchedWeek {
-            period = 7 * 24 * time.Hour
-        } else if matchedMonth {
-            period = 30 * 24 * time.Hour
-        } else if matchedYear {
-            period = 365 * 24 * time.Hour
+		} else if matchedWeek {
+			period = 7 * 24 * time.Hour
+		} else if matchedMonth {
+			period = 30 * 24 * time.Hour
+		} else if matchedYear {
+			period = 365 * 24 * time.Hour
 		} else {
 			log.Printf("Time period %s doesn't match any known format", timePeriod)
 			err := errors.New("Time period doesn't match any known")
@@ -112,6 +114,14 @@ func (h *remindHandler) HandleOne(msg tgbotapi.Message) {
 		replyTo: msg.MessageID,
 		t:       t})
 	h.cron.AddJob(t, &job)
+
+	tz, _ := h.properties.GetProperty("timezone", tgbotbase.UserID(msg.From.ID), tgbotbase.ChatID(msg.Chat.ID))
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		log.Printf("Could not load timezone %s correctly; location loaded with error: %s", tz, err)
+	} else {
+		t = t.In(loc)
+	}
 
 	replyText := fmt.Sprintf("Принято, напомню около %s", t.Format(timeFormat_Out_Confirm))
 	replyMsg := tgbotapi.NewMessage(msg.Chat.ID, replyText)
