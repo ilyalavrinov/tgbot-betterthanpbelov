@@ -73,13 +73,22 @@ func determineReminderTime(msg string) (time.Time, error) {
 		period := time.Minute
 		matchedMinute, _ := regexp.MatchString("минут", timePeriod)
 		matchedHour, _ := regexp.MatchString("час", timePeriod)
-		matchedDay, _ := regexp.MatchString("дней", timePeriod)
+		matchedDay, _ := regexp.MatchString("день|дня|дней", timePeriod)
+        matchedWeek, _ := regexp.MatchString("недел", timePeriod)
+        matchedMonth, _ := regexp.MatchString("месяц", timePeriod)
+        matchedYear, _ := regexp.MatchString("год|лет", timePeriod)
 		if matchedMinute {
 			period = time.Minute
 		} else if matchedHour {
 			period = time.Hour
 		} else if matchedDay {
 			period = 24 * time.Hour
+        } else if matchedWeek {
+            period = 7 * 24 * time.Hour
+        } else if matchedMonth {
+            period = 30 * 24 * time.Hour
+        } else if matchedYear {
+            period = 365 * 24 * time.Hour
 		} else {
 			log.Printf("Time period %s doesn't match any known format", timePeriod)
 			err := errors.New("Time period doesn't match any known")
