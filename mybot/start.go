@@ -30,6 +30,7 @@ func Start(cfg_filename string) error {
 	bot.AddHandler(tgbotbase.NewIncomingMessageDealer(cmd.NewWeatherHandler(fullcfg.Weather.Token, redispool, propstorage)))
 	bot.AddHandler(tgbotbase.NewIncomingMessageDealer(cmd.NewPropertyHandler(propstorage)))
 	bot.AddHandler(tgbotbase.NewIncomingMessageDealer(cmd.NewRemindHandler(cron, remindstorage)))
+	bot.AddHandler(tgbotbase.NewBackgroundMessageDealer(cmd.NewKittiesHandler(cron, propstorage)))
 	/*     handlers = append(handlers, cmd.NewKittiesHandler(),
 	       cmd.NewWeatherHandler(cfg.Weather.Token, opts),
 	       cmd.NewDeathHandler(),
