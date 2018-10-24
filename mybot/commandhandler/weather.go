@@ -40,27 +40,33 @@ func requestData(reqType string, cityId int64, apiKey string) ([]byte, error) {
 }
 
 func (h *weatherHandler) determineCity(msg tgbotapi.Message) (int64, error) {
-	city := ""
-
 	reInCity := regexp.MustCompile("(в|in) ([\\wA-Za-zА-Яа-я]+)")
 	text := msg.Text
 	if reInCity.MatchString(text) {
 		log.Printf("Message '%s' matches 'in city' regexp %s", text, reInCity)
 		matches := reInCity.FindStringSubmatch(text)
-		city = matches[2]
-	} else {
-		var err error
-		city, err = h.properties.GetProperty("city", tgbotbase.UserID(msg.From.ID), tgbotbase.ChatID(msg.Chat.ID))
-		if err != nil {
-			log.Printf("Could not get weather city property due to error: %s", err)
-			return 0, err
-		}
+		city := matches[2]
+		return getCityIDByName(h.redisconn, city)
 	}
 
+	return getCityIDFromProperty(h.properties, h.redisconn, tgbotbase.UserID(msg.From.ID), tgbotbase.ChatID(msg.Chat.ID))
+}
+
+func getCityIDFromProperty(props tgbotbase.PropertyStorage, conn *redis.Client, userID tgbotbase.UserID, chatID tgbotbase.ChatID) (int64, error) {
+	city, err := props.GetProperty("city", userID, chatID)
+	if err != nil {
+		log.Printf("Could not get weather city property due to error: %s", err)
+		return 0, err
+	}
+
+	return getCityIDByName(conn, city)
+}
+
+func getCityIDByName(conn *redis.Client, city string) (int64, error) {
 	city = strings.ToLower(city)
 
 	key := fmt.Sprintf("openweathermap:city:%s", city)
-	result := h.redisconn.HGet(key, "id")
+	result := conn.HGet(key, "id")
 	if result.Err() != nil {
 		log.Printf("Could not HGet for key '%s', error: %s", key, result.Err())
 		return 0, result.Err()
