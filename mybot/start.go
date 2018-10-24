@@ -27,10 +27,14 @@ func Start(cfg_filename string) error {
 
 	cron := tgbotbase.NewCron()
 
-	bot.AddHandler(tgbotbase.NewIncomingMessageDealer(cmd.NewWeatherHandler(fullcfg.Weather.Token, redispool, propstorage)))
 	bot.AddHandler(tgbotbase.NewIncomingMessageDealer(cmd.NewPropertyHandler(propstorage)))
+<<<<<<< HEAD
 	bot.AddHandler(tgbotbase.NewIncomingMessageDealer(cmd.NewRemindHandler(cron, remindstorage)))
 	bot.AddHandler(tgbotbase.NewBackgroundMessageDealer(cmd.NewKittiesHandler(cron, propstorage)))
+=======
+	bot.AddHandler(tgbotbase.NewIncomingMessageDealer(cmd.NewWeatherHandler(fullcfg.Weather.Token, redispool, propstorage)))
+	bot.AddHandler(tgbotbase.NewIncomingMessageDealer(cmd.NewRemindHandler(cron, remindstorage, propstorage)))
+>>>>>>> ac6b42e6a926cc9ee4db23bfe6a69486b5d89a79
 	/*     handlers = append(handlers, cmd.NewKittiesHandler(),
 	       cmd.NewWeatherHandler(cfg.Weather.Token, opts),
 	       cmd.NewDeathHandler(),
