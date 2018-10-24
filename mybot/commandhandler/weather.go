@@ -231,7 +231,7 @@ func NewWeatherHandler(token string, pool tgbotbase.RedisPool, properties tgbotb
 	return &handler
 }
 
-func (h *weatherHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<- tgbotbase.ServiceMsg) tgbotbase.HandlerTrigger {
+func (h *weatherHandler) Init(outMsgCh chan<- tgbotapi.Chattable, srvCh chan<- tgbotbase.ServiceMsg) tgbotbase.HandlerTrigger {
 	h.OutMsgCh = outMsgCh
 	return tgbotbase.NewHandlerTrigger(regexp.MustCompile("^погода"), nil)
 }

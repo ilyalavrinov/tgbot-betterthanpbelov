@@ -38,7 +38,7 @@ func (h *propertyHandler) HandleOne(msg tgbotapi.Message) {
 	}
 }
 
-func (h *propertyHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<- tgbotbase.ServiceMsg) tgbotbase.HandlerTrigger {
+func (h *propertyHandler) Init(outMsgCh chan<- tgbotapi.Chattable, srvCh chan<- tgbotbase.ServiceMsg) tgbotbase.HandlerTrigger {
 	return tgbotbase.NewHandlerTrigger(nil, []string{"propset", "propsetchat"})
 }
 

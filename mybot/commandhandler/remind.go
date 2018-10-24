@@ -12,13 +12,13 @@ import "gopkg.in/telegram-bot-api.v4"
 const timeFormat_Out_Confirm = "2006-01-02 15:04:05"
 
 type remindCronJob struct {
-	outMsgCh chan<- tgbotapi.MessageConfig
+	outMsgCh chan<- tgbotapi.Chattable
 	storage  ReminderStorage
 
 	reminder Reminder
 }
 
-func newRemindCronJob(storage ReminderStorage, outMsgCh chan<- tgbotapi.MessageConfig, reminder Reminder) remindCronJob {
+func newRemindCronJob(storage ReminderStorage, outMsgCh chan<- tgbotapi.Chattable, reminder Reminder) remindCronJob {
 	job := remindCronJob{
 		outMsgCh: outMsgCh,
 		storage:  storage,
@@ -111,7 +111,7 @@ func (h *remindHandler) HandleOne(msg tgbotapi.Message) {
 
 }
 
-func (h *remindHandler) Init(outMsgCh chan<- tgbotapi.MessageConfig, srvCh chan<- tgbotbase.ServiceMsg) tgbotbase.HandlerTrigger {
+func (h *remindHandler) Init(outMsgCh chan<- tgbotapi.Chattable, srvCh chan<- tgbotbase.ServiceMsg) tgbotbase.HandlerTrigger {
 	h.OutMsgCh = outMsgCh
 
 	allReminders := h.storage.LoadAll()
