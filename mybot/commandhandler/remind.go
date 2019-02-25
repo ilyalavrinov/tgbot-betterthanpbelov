@@ -73,13 +73,16 @@ func determineReminderTime(msg string) (time.Time, error) {
 			q, _ = strconv.Atoi(timeQuantity)
 		}
 		period := time.Minute
+		matchedSecond, _ := regexp.MatchString("секунд", timePeriod)
 		matchedMinute, _ := regexp.MatchString("минут", timePeriod)
 		matchedHour, _ := regexp.MatchString("час", timePeriod)
 		matchedDay, _ := regexp.MatchString("день|дня|дней", timePeriod)
 		matchedWeek, _ := regexp.MatchString("недел", timePeriod)
 		matchedMonth, _ := regexp.MatchString("месяц", timePeriod)
 		matchedYear, _ := regexp.MatchString("год|лет", timePeriod)
-		if matchedMinute {
+		if matchedSecond {
+			period = time.Second
+		} else if matchedMinute {
 			period = time.Minute
 		} else if matchedHour {
 			period = time.Hour
