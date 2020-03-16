@@ -1,9 +1,11 @@
 package mybot
 
-import "log"
-import "github.com/admirallarimda/tgbotbase"
+import (
+	"log"
 
-import "github.com/admirallarimda/tgbot-betterthanpbelov/mybot/commandhandler"
+	"github.com/ilyalavrinov/tgbot-betterthanpbelov/mybot/commandhandler"
+	"github.com/admirallarimda/tgbotbase"
+)
 
 func Start(cfg_filename string) error {
 	log.Print("Starting my bot")

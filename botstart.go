@@ -1,9 +1,12 @@
 package main
 
-import "github.com/admirallarimda/tgbot-betterthanpbelov/mybot"
-import "log"
-import "math/rand"
-import "time"
+import (
+	"log"
+	"math/rand"
+	"time"
+
+	"github.com/ilyalavrinov/tgbot-betterthanpbelov/mybot"
+)
 
 const cfg_filename = "mybot.cfg"
 
