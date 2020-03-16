@@ -5,6 +5,9 @@ go 1.13
 require (
 	github.com/admirallarimda/tgbotbase v0.0.0-20200131200809-fbd3ee3f4168
 	github.com/go-redis/redis v6.15.7+incompatible
+	github.com/go-telegram-bot-api/telegram-bot-api v4.6.4+incompatible // indirect
+	github.com/onsi/ginkgo v1.12.0 // indirect
+	github.com/onsi/gomega v1.9.0 // indirect
 	github.com/technoweenie/multipartstreamer v1.0.1 // indirect
 	golang.org/x/net v0.0.0-20200301022130-244492dfa37a // indirect
 	gopkg.in/gcfg.v1 v1.2.3
