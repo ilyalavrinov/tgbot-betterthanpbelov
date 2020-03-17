@@ -89,7 +89,12 @@ func (job *covidJob) Do(scheduledWhen time.Time, cron tgbotbase.Cron) {
 	defer cron.AddJob(scheduledWhen.Add(24*time.Hour), job)
 
 	url := "https://covid.ourworldindata.org/data/full_data.csv"
-	fname := path.Join("/tmp", "ilya-tgbot", "covid", fmt.Sprintf("cases-%s.csv", time.Now().Format("20060102")))
+	fpath := path.Join("/tmp", "ilya-tgbot", "covid")
+	if err := os.MkdirAll(fpath, os.ModePerm); err != nil {
+		log.Printf("Could not create covid directories at %q, err: %s", fpath, err)
+		return
+	}
+	fname := path.Join(fpath, fmt.Sprintf("cases-%s.csv", time.Now().Format("20060102")))
 	if err := downloadFile(fname, url); err != nil {
 		log.Printf("Could not download covid info from %q to %q, err: %s", url, fname, err)
 		return
