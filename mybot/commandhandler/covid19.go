@@ -4,12 +4,14 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path"
 	"strconv"
 	"time"
+
+	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/admirallarimda/tgbotbase"
 	tgbotapi "gopkg.in/telegram-bot-api.v4"
@@ -46,14 +48,38 @@ func (h *covid19Handler) Run() {
 	// TODO: same as for kitties. Write common func
 	now := time.Now()
 
+	countriesOfInterest := []string{"Italy", "Russia", "China"}
+
 	go func() {
 		data := covidData{}
-		select {
-		case data = <-h.updates:
-			// ok, do nothing
-		case chatID := <-h.toSend:
-			msg := tgbotapi.NewMessage(int64(chatID), fmt.Sprintf("Утренний коронавирус!\nВсего заболевших: %d (новых: +%d)\nВсего умерших: %d (новых: +%d)", data.worldLatest.totalCases, data.worldLatest.newCases, data.worldLatest.totalDeaths, data.worldLatest.newDeaths))
-			h.OutMsgCh <- msg
+		for {
+			select {
+			case data = <-h.updates:
+				log.WithFields(logrus.Fields{"handler": "covid19", "total_cases": data.worldLatest.totalCases}).Debug("Update!")
+				// ok, do nothing
+			case chatID := <-h.toSend:
+				text := fmt.Sprintf("Новости коронавируса!")
+				text = fmt.Sprintf("%s\nВ мире:\nВсего заболевших: %d (новых: +%d)\nВсего умерших: %d (новых: +%d)",
+					text, data.worldLatest.totalCases, data.worldLatest.newCases, data.worldLatest.totalDeaths, data.worldLatest.newDeaths)
+				for _, country := range countriesOfInterest {
+					if cases, found := data.countryLatest[country]; found {
+						text = fmt.Sprintf("%s\n\nВ %s (данные на %s):\nЗаболевших: %d (новых за день: +%d)\nУмерших: %d (новых за день: +%d)",
+							text, country, cases.date.Format("2006-01-02"), cases.totalCases, cases.newCases, cases.totalDeaths, cases.newDeaths)
+					}
+				}
+				russiaData := data.countryLatest["Russia"]
+				italyRaw := data.countryRaw["Italy"]
+				for i := len(italyRaw) - 1; i >= 0; i-- {
+					raw := italyRaw[i]
+					if raw.totalCases < russiaData.totalCases {
+						text = fmt.Sprintf("%s\n\nВ Италии похожее количестве заболевших (%d; +%d по сравнению с предыдущим днём) было %s (%.0f дней назад)",
+							text, raw.totalCases, raw.newCases, raw.date.Format("2006-01-02"), russiaData.date.Sub(raw.date).Hours()/24)
+						break
+					}
+				}
+				msg := tgbotapi.NewMessage(int64(chatID), text)
+				h.OutMsgCh <- msg
+			}
 		}
 	}()
 
@@ -70,7 +96,6 @@ func (h *covid19Handler) Run() {
 			log.Printf("Could not parse duration %s for chat %d due to error: %s", prop.Value, prop.Chat, err)
 			continue
 		}
-
 		when := tgbotbase.CalcNextTimeFromMidnight(now, dur)
 		job := covidJob{
 			chatID: prop.Chat,
@@ -101,6 +126,7 @@ const (
 )
 
 type casesData struct {
+	date        time.Time
 	newCases    int
 	totalCases  int
 	newDeaths   int
@@ -134,6 +160,7 @@ func downloadFile(filepath string, url string) error {
 }
 
 type covidData struct {
+	countryRaw    map[string][]casesData
 	countryLatest map[string]casesData
 	worldLatest   casesData
 }
@@ -145,7 +172,7 @@ type covidUpdateJob struct {
 func (j *covidUpdateJob) Do(scheduledWhen time.Time, cron tgbotbase.Cron) {
 	defer cron.AddJob(scheduledWhen.Add(1*time.Hour), j)
 
-	url := "https://covid.ourworldindata.org/data/full_data.csv"
+	url := "https://covid.ourworldindata.org/data/ecdc/full_data.csv"
 	fpath := path.Join("/tmp", "ilya-tgbot", "covid")
 	if err := os.MkdirAll(fpath, os.ModePerm); err != nil {
 		log.Printf("Could not create covid directories at %q, err: %s", fpath, err)
@@ -170,32 +197,39 @@ func (j *covidUpdateJob) Do(scheduledWhen time.Time, cron tgbotbase.Cron) {
 		return
 	}
 
-	m := make(map[string]casesData, 200)
-	lastDates := make(map[string]time.Time, 200)
+	raw := make(map[string][]casesData, 200)
+	latest := make(map[string]casesData, 200)
+	dates := make(map[string]time.Time, 200)
 	for _, line := range data {
 		d, _ := time.Parse("2006-01-02", line[colDate])
-		lastDate, found := lastDates[line[colCountry]]
-		if found && d.Before(lastDate) {
-			continue
-		}
-
-		lastDates[line[colCountry]] = d
 
 		newCases, _ := strconv.Atoi(line[colNewCases])
 		totalCases, _ := strconv.Atoi(line[colTotalCases])
 		newDeaths, _ := strconv.Atoi(line[colNewDeaths])
 		totalDeaths, _ := strconv.Atoi(line[colTotalDeaths])
 		cinfo := casesData{
+			date:        d,
 			newCases:    newCases,
 			totalCases:  totalCases,
 			newDeaths:   newDeaths,
 			totalDeaths: totalDeaths,
 		}
-		m[line[colCountry]] = cinfo
+
+		// assuming that dates are ordered
+		country := line[colCountry]
+		raw[country] = append(raw[country], cinfo)
+
+		date, found := dates[country]
+		if found && d.Before(date) {
+			continue
+		}
+
+		dates[country] = d
+		latest[country] = cinfo
 	}
 
 	worldInfo := casesData{}
-	for _, d := range m {
+	for _, d := range latest {
 		worldInfo.newCases += d.newCases
 		worldInfo.newDeaths += d.newDeaths
 		worldInfo.totalCases += d.totalCases
@@ -203,7 +237,8 @@ func (j *covidUpdateJob) Do(scheduledWhen time.Time, cron tgbotbase.Cron) {
 	}
 
 	j.updates <- covidData{
-		countryLatest: m,
+		countryRaw:    raw,
+		countryLatest: latest,
 		worldLatest:   worldInfo,
 	}
 }

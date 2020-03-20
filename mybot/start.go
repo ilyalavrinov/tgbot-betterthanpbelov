@@ -1,13 +1,14 @@
 package mybot
 
 import (
-	"log"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/admirallarimda/tgbotbase"
 	cmd "github.com/ilyalavrinov/tgbot-betterthanpbelov/mybot/commandhandler"
 )
 
 func Start(cfg_filename string) error {
+	log.SetLevel(log.DebugLevel)
 	log.Print("Starting my bot")
 
 	fullcfg, err := NewConfig(cfg_filename)
