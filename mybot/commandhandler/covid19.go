@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/admirallarimda/tgbotbase"
@@ -55,12 +54,12 @@ func (h *covid19Handler) Run() {
 		for {
 			select {
 			case data = <-h.updates:
-				log.WithFields(logrus.Fields{"handler": "covid19", "total_cases": data.worldLatest.totalCases}).Debug("Update!")
 				// ok, do nothing
 			case chatID := <-h.toSend:
 				text := fmt.Sprintf("Новости коронавируса!")
+				worldLatest := data.countryLatest["World"]
 				text = fmt.Sprintf("%s\nВ мире:\nВсего заболевших: %d (новых: +%d)\nВсего умерших: %d (новых: +%d)",
-					text, data.worldLatest.totalCases, data.worldLatest.newCases, data.worldLatest.totalDeaths, data.worldLatest.newDeaths)
+					text, worldLatest.totalCases, worldLatest.newCases, worldLatest.totalDeaths, worldLatest.newDeaths)
 				for _, country := range countriesOfInterest {
 					if cases, found := data.countryLatest[country]; found {
 						text = fmt.Sprintf("%s\n\nВ %s (данные на %s):\nЗаболевших: %d (новых за день: +%d)\nУмерших: %d (новых за день: +%d)",
@@ -228,17 +227,8 @@ func (j *covidUpdateJob) Do(scheduledWhen time.Time, cron tgbotbase.Cron) {
 		latest[country] = cinfo
 	}
 
-	worldInfo := casesData{}
-	for _, d := range latest {
-		worldInfo.newCases += d.newCases
-		worldInfo.newDeaths += d.newDeaths
-		worldInfo.totalCases += d.totalCases
-		worldInfo.totalDeaths += d.totalDeaths
-	}
-
 	j.updates <- covidData{
 		countryRaw:    raw,
 		countryLatest: latest,
-		worldLatest:   worldInfo,
 	}
 }
