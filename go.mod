@@ -6,6 +6,7 @@ require (
 	github.com/admirallarimda/tgbotbase v0.0.0-20200131200809-fbd3ee3f4168
 	github.com/go-redis/redis v6.15.7+incompatible
 	github.com/go-telegram-bot-api/telegram-bot-api v4.6.4+incompatible // indirect
+	github.com/mailru/easyjson v0.7.1
 	github.com/onsi/ginkgo v1.12.0 // indirect
 	github.com/onsi/gomega v1.9.0 // indirect
 	github.com/sirupsen/logrus v1.4.2

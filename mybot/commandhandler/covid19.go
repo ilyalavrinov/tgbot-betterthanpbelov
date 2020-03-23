@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -17,6 +18,13 @@ import (
 )
 
 var markdownToEscape = []string{"\\", "`", "*", "_", "{", "}", "[", "]", "(", ")", "#", "+", "-", ".", "!", "|"}
+
+func escapeMarkdownSpecial(s string) string {
+	for _, e := range markdownToEscape {
+		s = strings.Replace(s, e, "\\"+e, -1)
+	}
+	return s
+}
 
 type covid19Handler struct {
 	tgbotbase.BaseHandler
@@ -74,7 +82,7 @@ func (h *covid19Handler) Run() {
 				}
 				h.props.SetPropertyForUserInChat("covidLastUpdate", tgbotbase.UserID(0), tgbotbase.ChatID(0), lastDate.Format("2006-01-02"))
 				prevLastDate = lastDate
-				text := fmt.Sprintf("Новости \\#covid19")
+				text := fmt.Sprintf("Обновление \\#covid19")
 				for country, localName := range countriesOfInterest {
 					if cases, found := data.countryLatest[country]; found {
 						text = fmt.Sprintf("%s\n***%s***: 💊 %d \\(\\+%d\\) \\| 💀 %d \\(\\+%d\\)",
@@ -82,6 +90,12 @@ func (h *covid19Handler) Run() {
 					}
 				}
 				text = fmt.Sprintf("%s\n[карта](https://gisanddata.maps.arcgis.com/apps/opsdashboard/index.html#/bda7594740fd40299423467b48e9ecf6) \\+ [графики](https://ourworldindata.org/coronavirus#growth-country-by-country-view)", text)
+				if news, err := loadYaNews(YaNewsCovid19); err == nil && len(news) > 0 {
+					text = fmt.Sprintf("%s\n\nПоследние новости:", text)
+					for _, n := range news {
+						text = fmt.Sprintf("%s\n%s", text, n.toMarkdown())
+					}
+				}
 				for _, chatID := range chatsToNotify {
 					msg := tgbotapi.NewMessage(int64(chatID), text)
 					msg.ParseMode = "MarkdownV2"

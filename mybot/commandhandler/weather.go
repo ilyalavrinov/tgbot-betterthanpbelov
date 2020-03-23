@@ -1,16 +1,20 @@
 package cmd
 
-import "fmt"
-import "log"
-import "time"
-import "regexp"
-import "strings"
-import "encoding/json"
-import "net/http"
-import "io/ioutil"
-import "github.com/admirallarimda/tgbotbase"
-import "gopkg.in/telegram-bot-api.v4"
-import "github.com/go-redis/redis"
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/admirallarimda/tgbotbase"
+
+	"github.com/go-redis/redis"
+	tgbotapi "gopkg.in/telegram-bot-api.v4"
+)
 
 var reToday *regexp.Regexp = regexp.MustCompile("сегодня")
 var reDayAfterTomorrow *regexp.Regexp = regexp.MustCompile("послезавтра")
