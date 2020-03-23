@@ -36,11 +36,7 @@ func Start(cfg_filename string) error {
 	bot.AddHandler(tgbotbase.NewBackgroundMessageDealer(cmd.NewKittiesHandler(cron, propstorage)))
 	bot.AddHandler(tgbotbase.NewBackgroundMessageDealer(cmd.NewWeatherMorningHandler(cron, propstorage, redispool, fullcfg.Weather.Token)))
 	bot.AddHandler(tgbotbase.NewBackgroundMessageDealer(cmd.NewCovid19Handler(cron, propstorage)))
-	/*     handlers = append(handlers, cmd.NewKittiesHandler(),
-	       cmd.NewWeatherHandler(cfg.Weather.Token, opts),
-	       cmd.NewDeathHandler(),
-	       cmd.NewRemindHandler(notificationChannel))
-	*/
+	bot.AddHandler(tgbotbase.NewBackgroundMessageDealer(cmd.NewNewsNNHandler(cron, propstorage)))
 	bot.Start()
 
 	log.Print("Stopping my bot")
