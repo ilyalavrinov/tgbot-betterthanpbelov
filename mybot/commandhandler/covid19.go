@@ -16,6 +16,8 @@ import (
 	tgbotapi "gopkg.in/telegram-bot-api.v4"
 )
 
+var markdownToEscape = []string{"\\", "`", "*", "_", "{", "}", "[", "]", "(", ")", "#", "+", "-", ".", "!", "|"}
+
 type covid19Handler struct {
 	tgbotbase.BaseHandler
 	props tgbotbase.PropertyStorage
@@ -44,64 +46,53 @@ func (h *covid19Handler) Init(outMsgCh chan<- tgbotapi.Chattable, srvCh chan<- t
 }
 
 func (h *covid19Handler) Run() {
-	// TODO: same as for kitties. Write common func
-	now := time.Now()
-
-	countriesOfInterest := []string{"Italy", "Russia", "China"}
-
-	go func() {
-		data := covidData{}
-		for {
-			select {
-			case data = <-h.updates:
-				// ok, do nothing
-			case chatID := <-h.toSend:
-				text := fmt.Sprintf("Новости коронавируса!")
-				worldLatest := data.countryLatest["World"]
-				text = fmt.Sprintf("%s\nВ мире:\nВсего заболевших: %d (новых: +%d)\nВсего умерших: %d (новых: +%d)",
-					text, worldLatest.totalCases, worldLatest.newCases, worldLatest.totalDeaths, worldLatest.newDeaths)
-				for _, country := range countriesOfInterest {
-					if cases, found := data.countryLatest[country]; found {
-						text = fmt.Sprintf("%s\n\nВ %s (данные на %s):\nЗаболевших: %d (новых за день: +%d)\nУмерших: %d (новых за день: +%d)",
-							text, country, cases.date.Format("2006-01-02"), cases.totalCases, cases.newCases, cases.totalDeaths, cases.newDeaths)
-					}
-				}
-				russiaData := data.countryLatest["Russia"]
-				italyRaw := data.countryRaw["Italy"]
-				for i := len(italyRaw) - 1; i >= 0; i-- {
-					raw := italyRaw[i]
-					if raw.totalCases < russiaData.totalCases {
-						text = fmt.Sprintf("%s\n\nВ Италии похожее количестве заболевших (%d; +%d по сравнению с предыдущим днём) было %s (%.0f дней назад)",
-							text, raw.totalCases, raw.newCases, raw.date.Format("2006-01-02"), russiaData.date.Sub(raw.date).Hours()/24)
-						break
-					}
-				}
-				msg := tgbotapi.NewMessage(int64(chatID), text)
-				h.OutMsgCh <- msg
-			}
-		}
-	}()
-
-	h.cron.AddJob(time.Now(), &covidUpdateJob{updates: h.updates})
-
+	chatsToNotify := make([]tgbotbase.ChatID, 0)
 	props, _ := h.props.GetEveryHavingProperty("covid19Time")
 	for _, prop := range props {
 		if (prop.User != 0) && (tgbotbase.ChatID(prop.User) != prop.Chat) {
 			log.Printf("COVID-19: Skipping special setting for user %d in chat %d", prop.User, prop.Chat)
 			continue
 		}
-		dur, err := time.ParseDuration(prop.Value)
-		if err != nil {
-			log.Printf("Could not parse duration %s for chat %d due to error: %s", prop.Value, prop.Chat, err)
-			continue
-		}
-		when := tgbotbase.CalcNextTimeFromMidnight(now, dur)
-		job := covidJob{
-			chatID: prop.Chat,
-			ch:     h.toSend,
-		}
-		h.cron.AddJob(when, &job)
+		chatsToNotify = append(chatsToNotify, prop.Chat)
 	}
+
+	countriesOfInterest := map[string]string{"World": "В мире", "Russia": "Россия", "United States": "США", "Italy": "Италия", "China": "Китай"}
+	prevLastDateS, _ := h.props.GetProperty("covidLastUpdate", tgbotbase.UserID(0), tgbotbase.ChatID(0))
+	prevLastDate, err := time.Parse("2006-01-02", prevLastDateS)
+	if err != nil {
+		prevLastDate = time.Now()
+	}
+
+	go func() {
+		data := covidData{}
+		for {
+			select {
+			case data = <-h.updates:
+				lastDate := data.countryLatest["Russia"].date
+				if !lastDate.After(prevLastDate) {
+					continue
+				}
+				h.props.SetPropertyForUserInChat("covidLastUpdate", tgbotbase.UserID(0), tgbotbase.ChatID(0), lastDate.Format("2006-01-02"))
+				prevLastDate = lastDate
+				text := fmt.Sprintf("Новости \\#covid19")
+				for country, localName := range countriesOfInterest {
+					if cases, found := data.countryLatest[country]; found {
+						text = fmt.Sprintf("%s\n***%s***: 💊 %d \\(\\+%d\\) \\| 💀 %d \\(\\+%d\\)",
+							text, localName, cases.totalCases, cases.newCases, cases.totalDeaths, cases.newDeaths)
+					}
+				}
+				text = fmt.Sprintf("%s\n[карта](https://gisanddata.maps.arcgis.com/apps/opsdashboard/index.html#/bda7594740fd40299423467b48e9ecf6) \\+ [графики](https://ourworldindata.org/coronavirus#growth-country-by-country-view)", text)
+				for _, chatID := range chatsToNotify {
+					msg := tgbotapi.NewMessage(int64(chatID), text)
+					msg.ParseMode = "MarkdownV2"
+					msg.DisableWebPagePreview = true
+					h.OutMsgCh <- msg
+				}
+			}
+		}
+	}()
+
+	h.cron.AddJob(time.Now(), &covidUpdateJob{updates: h.updates})
 }
 
 func (h *covid19Handler) Name() string {
