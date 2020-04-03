@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gocolly/colly"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/admirallarimda/tgbotbase"
@@ -65,10 +67,10 @@ func (h *covid19Handler) Run() {
 	}
 
 	countriesOfInterest := map[string]string{"World": "В мире", "Russia": "Россия", "United States": "США", "Italy": "Италия", "China": "Китай"}
-	prevLastDateS, _ := h.props.GetProperty("covidLastUpdate", tgbotbase.UserID(0), tgbotbase.ChatID(0))
-	prevLastDate, err := time.Parse("2006-01-02", prevLastDateS)
+	prevLastCasesS, _ := h.props.GetProperty("covidLastCasesRussia", tgbotbase.UserID(0), tgbotbase.ChatID(0))
+	prevLastCases, err := strconv.Atoi(prevLastCasesS)
 	if err != nil {
-		prevLastDate = time.Now()
+		prevLastCases = 0
 	}
 
 	go func() {
@@ -76,12 +78,13 @@ func (h *covid19Handler) Run() {
 		for {
 			select {
 			case data = <-h.updates:
-				lastDate := data.countryLatest["Russia"].date
-				if !lastDate.After(prevLastDate) {
+				lastCases := data.countryLatest["Russia"].totalCases
+				log.WithFields(log.Fields{"prev": prevLastCases, "new": lastCases}).Debug("New update received")
+				if lastCases <= prevLastCases {
 					continue
 				}
-				h.props.SetPropertyForUserInChat("covidLastUpdate", tgbotbase.UserID(0), tgbotbase.ChatID(0), lastDate.Format("2006-01-02"))
-				prevLastDate = lastDate
+				prevLastCases = lastCases
+				h.props.SetPropertyForUserInChat("covidLastCasesRussia", tgbotbase.UserID(0), tgbotbase.ChatID(0), strconv.Itoa(lastCases))
 				text := fmt.Sprintf("Обновление \\#covid19")
 				for country, localName := range countriesOfInterest {
 					if cases, found := data.countryLatest[country]; found {
@@ -176,6 +179,7 @@ type covidUpdateJob struct {
 func (j *covidUpdateJob) Do(scheduledWhen time.Time, cron tgbotbase.Cron) {
 	defer cron.AddJob(scheduledWhen.Add(1*time.Hour), j)
 
+	log.Debug("Start covid update")
 	url := "https://covid.ourworldindata.org/data/ecdc/full_data.csv"
 	fpath := path.Join("/tmp", "ilya-tgbot", "covid")
 	if err := os.MkdirAll(fpath, os.ModePerm); err != nil {
@@ -232,8 +236,46 @@ func (j *covidUpdateJob) Do(scheduledWhen time.Time, cron tgbotbase.Cron) {
 		latest[country] = cinfo
 	}
 
+	russiaData, err := getRussiaData()
+	if err == nil {
+		latest["Russia"] = russiaData
+	}
+
 	j.updates <- covidData{
 		countryRaw:    raw,
 		countryLatest: latest,
 	}
+}
+
+var re *regexp.Regexp = regexp.MustCompile("(\\d*)\\+(\\d*)[А-Яа-я]*(\\d*)\\+(\\d*)[А-Яа-я]*(\\d*)\\+(\\d*)[А-Яа-я]*")
+
+func getRussiaData() (casesData, error) {
+	cases := casesData{}
+	c := colly.NewCollector()
+	c.OnHTML(".d-map__counter", func(e *colly.HTMLElement) {
+		text := e.Text
+		text = strings.ReplaceAll(text, " ", "")
+		matches := re.FindAllStringSubmatch(text, -1)
+
+		atoi := func(s string) int {
+			res, err := strconv.Atoi(s)
+			if err != nil {
+				log.WithFields(log.Fields{"err": err, "str": s}).Error("Could not convert in atoi")
+			}
+			return res
+		}
+
+		cases.totalCases = atoi(matches[0][1])
+		cases.newCases = atoi(matches[0][2])
+		cases.totalDeaths = atoi(matches[0][5])
+		cases.newDeaths = atoi(matches[0][6])
+	})
+
+	log.Debug("Starting to get russia covid data")
+	err := c.Visit("https://xn--80aesfpebagmfblc0a.xn--p1ai") // стопкоронавирус.рф
+	if err != nil {
+		log.Printf("Error! %s\n", err)
+	}
+	log.WithField("totalCases", cases.totalCases).Debug("Finished getting russia covid data")
+	return cases, err
 }
