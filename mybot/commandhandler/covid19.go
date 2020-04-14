@@ -21,11 +21,23 @@ import (
 
 var markdownToEscape = []string{"\\", "`", "*", "_", "{", "}", "[", "]", "(", ")", "#", "+", "-", ".", "!", "|"}
 
+const (
+	nnID = "52region"
+)
+
 func escapeMarkdownSpecial(s string) string {
 	for _, e := range markdownToEscape {
 		s = strings.Replace(s, e, "\\"+e, -1)
 	}
 	return s
+}
+
+func atoi(s string) int {
+	res, err := strconv.Atoi(s)
+	if err != nil {
+		log.WithFields(log.Fields{"err": err, "str": s}).Error("Could not convert in atoi")
+	}
+	return res
 }
 
 type covid19Handler struct {
@@ -66,7 +78,7 @@ func (h *covid19Handler) Run() {
 		chatsToNotify = append(chatsToNotify, prop.Chat)
 	}
 
-	countriesOfInterest := map[string]string{"World": "В мире", "Russia": "Россия", "United States": "США", "Italy": "Италия", "China": "Китай"}
+	countriesOfInterest := map[string]string{"World": "В мире", "Russia": "Россия", "United States": "США", "Italy": "Италия", "China": "Китай", nnID: "НижОбла"}
 	prevLastCasesS, _ := h.props.GetProperty("covidLastCasesRussia", tgbotbase.UserID(0), tgbotbase.ChatID(0))
 	prevLastCases, err := strconv.Atoi(prevLastCasesS)
 	if err != nil {
@@ -85,6 +97,19 @@ func (h *covid19Handler) Run() {
 				}
 				prevLastCases = lastCases
 				h.props.SetPropertyForUserInChat("covidLastCasesRussia", tgbotbase.UserID(0), tgbotbase.ChatID(0), strconv.Itoa(lastCases))
+
+				// special NN handling - need to update some values
+				prevNNTotalS, _ := h.props.GetProperty("covidLastCasesNNTotal", tgbotbase.UserID(0), tgbotbase.ChatID(0))
+				prevNNTotal := atoi(prevNNTotalS)
+				prevNNDeathsS, _ := h.props.GetProperty("covidLastDeathsNNTotal", tgbotbase.UserID(0), tgbotbase.ChatID(0))
+				prevNNDeaths := atoi(prevNNDeathsS)
+				nnCases := data.countryLatest[nnID]
+				nnCases.newCases = nnCases.totalCases - prevNNTotal
+				nnCases.newDeaths = nnCases.totalDeaths - prevNNDeaths
+				data.countryLatest[nnID] = nnCases
+				h.props.SetPropertyForUserInChat("covidLastCasesNNTotal", tgbotbase.UserID(0), tgbotbase.ChatID(0), strconv.Itoa(nnCases.totalCases))
+				h.props.SetPropertyForUserInChat("covidLastDeathsNNTotal", tgbotbase.UserID(0), tgbotbase.ChatID(0), strconv.Itoa(nnCases.totalDeaths))
+
 				text := fmt.Sprintf("Обновление \\#covid19")
 				for country, localName := range countriesOfInterest {
 					if cases, found := data.countryLatest[country]; found {
@@ -238,7 +263,9 @@ func (j *covidUpdateJob) Do(scheduledWhen time.Time, cron tgbotbase.Cron) {
 
 	russiaData, err := getRussiaData()
 	if err == nil {
-		latest["Russia"] = russiaData
+		for key, val := range russiaData {
+			latest[key] = val
+		}
 	}
 
 	j.updates <- covidData{
@@ -248,8 +275,11 @@ func (j *covidUpdateJob) Do(scheduledWhen time.Time, cron tgbotbase.Cron) {
 }
 
 var re *regexp.Regexp = regexp.MustCompile("(\\d*)\\+(\\d*)[А-Яа-я]*(\\d*)\\+(\\d*)[А-Яа-я]*(\\d*)\\+(\\d*)[А-Яа-я]*")
+var reNN *regexp.Regexp = regexp.MustCompile("Нижегородская область")
 
-func getRussiaData() (casesData, error) {
+func getRussiaData() (map[string]casesData, error) {
+	rusCases := make(map[string]casesData)
+
 	cases := casesData{}
 	c := colly.NewCollector()
 	c.OnHTML(".d-map__counter", func(e *colly.HTMLElement) {
@@ -257,18 +287,25 @@ func getRussiaData() (casesData, error) {
 		text = strings.ReplaceAll(text, " ", "")
 		matches := re.FindAllStringSubmatch(text, -1)
 
-		atoi := func(s string) int {
-			res, err := strconv.Atoi(s)
-			if err != nil {
-				log.WithFields(log.Fields{"err": err, "str": s}).Error("Could not convert in atoi")
-			}
-			return res
-		}
-
 		cases.totalCases = atoi(matches[0][1])
 		cases.newCases = atoi(matches[0][2])
 		cases.totalDeaths = atoi(matches[0][5])
 		cases.newDeaths = atoi(matches[0][6])
+	})
+
+	nnCases := casesData{}
+	c.OnHTML("tr", func(e *colly.HTMLElement) {
+		if !reNN.MatchString(e.Text) {
+			return
+		}
+		e.ForEach("td", func(i int, e2 *colly.HTMLElement) {
+			switch i {
+			case 0:
+				nnCases.totalCases = atoi(e2.Text)
+			case 2:
+				nnCases.totalDeaths = atoi(e2.Text)
+			}
+		})
 	})
 
 	log.Debug("Starting to get russia covid data")
@@ -276,6 +313,8 @@ func getRussiaData() (casesData, error) {
 	if err != nil {
 		log.Printf("Error! %s\n", err)
 	}
-	log.WithField("totalCases", cases.totalCases).Debug("Finished getting russia covid data")
-	return cases, err
+	log.WithFields(log.Fields{"totalCases": cases.totalCases, "NNtotalCases": nnCases.totalCases}).Debug("Finished getting russia covid data")
+	rusCases["Russia"] = cases
+	rusCases[nnID] = nnCases
+	return rusCases, err
 }
