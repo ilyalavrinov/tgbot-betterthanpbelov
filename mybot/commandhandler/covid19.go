@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -104,18 +104,6 @@ func (h *covid19Handler) Run() {
 				prevLastCases = lastCases
 				h.props.SetPropertyForUserInChat("covidLastCasesRussia", tgbotbase.UserID(0), tgbotbase.ChatID(0), strconv.Itoa(lastCases))
 
-				// special NN handling - need to update some values
-				prevNNTotalS, _ := h.props.GetProperty("covidLastCasesNNTotal", tgbotbase.UserID(0), tgbotbase.ChatID(0))
-				prevNNTotal := atoi(prevNNTotalS)
-				prevNNDeathsS, _ := h.props.GetProperty("covidLastDeathsNNTotal", tgbotbase.UserID(0), tgbotbase.ChatID(0))
-				prevNNDeaths := atoi(prevNNDeathsS)
-				nnCases := data.countryLatest[nnID]
-				nnCases.newCases = nnCases.totalCases - prevNNTotal
-				nnCases.newDeaths = nnCases.totalDeaths - prevNNDeaths
-				data.countryLatest[nnID] = nnCases
-				h.props.SetPropertyForUserInChat("covidLastCasesNNTotal", tgbotbase.UserID(0), tgbotbase.ChatID(0), strconv.Itoa(nnCases.totalCases))
-				h.props.SetPropertyForUserInChat("covidLastDeathsNNTotal", tgbotbase.UserID(0), tgbotbase.ChatID(0), strconv.Itoa(nnCases.totalDeaths))
-
 				text := fmt.Sprintf("Обновление \\#covid19")
 				for country, localName := range countriesOfInterest {
 					if cases, found := data.countryLatest[country]; found {
@@ -208,7 +196,7 @@ type covidUpdateJob struct {
 }
 
 func (j *covidUpdateJob) Do(scheduledWhen time.Time, cron tgbotbase.Cron) {
-	defer cron.AddJob(scheduledWhen.Add(1*time.Hour), j)
+	defer cron.AddJob(scheduledWhen.Add(30*time.Minute), j)
 
 	log.Debug("Start covid update")
 	url := "https://covid.ourworldindata.org/data/ecdc/full_data.csv"
@@ -280,42 +268,90 @@ func (j *covidUpdateJob) Do(scheduledWhen time.Time, cron tgbotbase.Cron) {
 	}
 }
 
-var re *regexp.Regexp = regexp.MustCompile("(\\d*)\\+(\\d*)[А-Яа-я]*(\\d*)\\+(\\d*)[А-Яа-я]*(\\d*)\\+(\\d*)[А-Яа-я]*")
-var reNN *regexp.Regexp = regexp.MustCompile("Нижегородская область")
+type rusTotalStats struct {
+	Sick          string
+	sickVal       int
+	SickChange    string
+	sickChangeVal int
+	Died          string
+	diedVal       int
+	DiedChange    string
+	diedChangeVal int
+}
+
+func (stat *rusTotalStats) toInt() {
+	stat.sickVal = statToInt(stat.Sick)
+	stat.sickChangeVal = statToInt(stat.SickChange)
+	stat.diedVal = statToInt(stat.Died)
+	stat.diedChangeVal = statToInt(stat.DiedChange)
+}
+
+func statToInt(s string) int {
+	s = strings.ReplaceAll(s, " ", "")
+	s = strings.ReplaceAll(s, "+", "")
+
+	return atoi(s)
+}
+
+const (
+	nnRegionCode = "RU-NIZ"
+)
+
+type regionStats struct {
+	Code     string
+	Sick     int
+	Died     int
+	SickIncr int `json:"sick_incr"`
+	DiedIncr int `json:"died_incr"`
+}
 
 func getRussiaData() (map[string]casesData, error) {
 	rusCases := make(map[string]casesData)
 
 	cases := casesData{}
 	c := colly.NewCollector()
-	c.OnHTML(".d-map__counter", func(e *colly.HTMLElement) {
-		text := e.Text
-		text = strings.ReplaceAll(text, " ", "")
-		matches := re.FindAllStringSubmatch(text, -1)
+	c.OnHTML("cv-stats-virus", func(e *colly.HTMLElement) {
+		text := e.Attr(":stats-data") // total rus data
 
-		cases.totalCases = atoi(matches[0][1])
-		cases.newCases = atoi(matches[0][2])
-		cases.totalDeaths = atoi(matches[0][5])
-		cases.newDeaths = atoi(matches[0][6])
+		var stat rusTotalStats
+		err := json.Unmarshal([]byte(text), &stat)
+		if err != nil {
+			log.WithFields(log.Fields{"text": text, "err": err}).Error("could not unmarshal russia stats")
+			return
+		}
+
+		stat.toInt()
+
+		cases.totalCases = stat.sickVal
+		cases.newCases = stat.diedChangeVal
+		cases.totalDeaths = stat.diedVal
+		cases.newDeaths = stat.diedChangeVal
 	})
 
 	nnCases := casesData{}
-	c.OnHTML("tr", func(e *colly.HTMLElement) {
-		if !reNN.MatchString(e.Text) {
+	c.OnHTML("cv-spread-overview", func(e *colly.HTMLElement) {
+		text := e.Attr(":spread-data")
+		stats := make([]regionStats, 0)
+		err := json.Unmarshal([]byte(text), &stats)
+		if err != nil {
+			log.WithFields(log.Fields{"text": text, "err": err}).Error("could not unmarshal region stats")
 			return
 		}
-		e.ForEach("td", func(i int, e2 *colly.HTMLElement) {
-			switch i {
-			case 0:
-				nnCases.totalCases = atoi(e2.Text)
-			case 2:
-				nnCases.totalDeaths = atoi(e2.Text)
+
+		for _, s := range stats {
+			if s.Code != nnRegionCode {
+				continue
 			}
-		})
+
+			nnCases.totalCases = s.Sick
+			nnCases.newCases = s.SickIncr
+			nnCases.totalDeaths = s.Died
+			nnCases.newDeaths = s.DiedIncr
+		}
 	})
 
 	log.Debug("Starting to get russia covid data")
-	err := c.Visit("https://xn--80aesfpebagmfblc0a.xn--p1ai") // стопкоронавирус.рф
+	err := c.Visit("https://xn--80aesfpebagmfblc0a.xn--p1ai/information") // стопкоронавирус.рф
 	if err != nil {
 		log.Printf("Error! %s\n", err)
 	}
