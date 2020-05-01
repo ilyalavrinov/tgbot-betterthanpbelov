@@ -323,7 +323,7 @@ func getRussiaData() (map[string]casesData, error) {
 		stat.toInt()
 
 		cases.totalCases = stat.sickVal
-		cases.newCases = stat.diedChangeVal
+		cases.newCases = stat.sickChangeVal
 		cases.totalDeaths = stat.diedVal
 		cases.newDeaths = stat.diedChangeVal
 	})
