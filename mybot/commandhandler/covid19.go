@@ -78,13 +78,14 @@ func (h *covid19Handler) Run() {
 		chatsToNotify = append(chatsToNotify, prop.Chat)
 	}
 
-	countriesOfInterest := map[string]string{
+	countriesOfInterestL10N := map[string]string{
 		"World":         "🌎В мире",
 		"Russia":        "🇷🇺Россия",
 		"United States": "🇺🇸США",
 		"Italy":         "🍕Италия",
 		"China":         "🇨🇳Китай",
 		nnID:            "🦌НижОбла"}
+	countriesOfInterest := []string{"World", "Russia", nnID, "United States"}
 	prevLastCasesS, _ := h.props.GetProperty("covidLastCasesRussia", tgbotbase.UserID(0), tgbotbase.ChatID(0))
 	prevLastCases, err := strconv.Atoi(prevLastCasesS)
 	if err != nil {
@@ -105,8 +106,12 @@ func (h *covid19Handler) Run() {
 				h.props.SetPropertyForUserInChat("covidLastCasesRussia", tgbotbase.UserID(0), tgbotbase.ChatID(0), strconv.Itoa(lastCases))
 
 				text := fmt.Sprintf("Обновление \\#covid19")
-				for country, localName := range countriesOfInterest {
-					if cases, found := data.countryLatest[country]; found {
+				for _, name := range countriesOfInterest {
+					localName := name
+					if l10n, found := countriesOfInterestL10N[name]; found {
+						localName = l10n
+					}
+					if cases, found := data.countryLatest[name]; found {
 						text = fmt.Sprintf("%s\n***%s***: 🌡 %d \\(\\+%d\\) \\| 💀 %d \\(\\+%d\\)",
 							text, localName, cases.totalCases, cases.newCases, cases.totalDeaths, cases.newDeaths)
 					}
