@@ -1,3 +1,6 @@
+# Repo is archived
+Migrated to a monorepo at github.com/ilyalavrinov/tgbots
+
 # tgbot-betterthanpbelov
 One step ahead than pbelov's bot in our chat
 
